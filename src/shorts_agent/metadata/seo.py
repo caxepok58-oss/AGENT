@@ -200,10 +200,14 @@ def _build_description(body: str, hashtags: list[str]) -> str:
 
 def validate_metadata(metadata: VideoMetadata) -> VideoMetadata:
     """Clamp metadata to the Data API's limits, warning where content was cut."""
+    metadata.title = metadata.title.strip()
+
     if len(metadata.title) > TITLE_LIMIT:
         logger.warning("Title exceeded %d characters and was truncated", TITLE_LIMIT)
         metadata.title = metadata.title[: TITLE_LIMIT - 1].rstrip() + "…"
 
+    # A whitespace-only title passes a plain truthiness check but is rejected by
+    # the Data API, so normalise before validating.
     if not metadata.title:
         raise ValueError("Generated metadata has an empty title")
 

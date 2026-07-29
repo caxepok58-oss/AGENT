@@ -22,6 +22,8 @@ _ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}
 WORDS_PER_CHUNK = 4
 MAX_CHARS_PER_LINE = 22
 MIN_EVENT_DURATION = 0.08
+# How long a finished phrase stays on screen during a pause before it clears.
+MAX_PHRASE_HOLD = 0.6
 
 
 def _timestamp(seconds: float) -> str:
@@ -136,13 +138,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     events: list[str] = []
-    for chunk in chunk_timings(timings):
+    chunks = chunk_timings(timings)
+
+    for chunk_index, chunk in enumerate(chunks):
+        next_chunk_start = (
+            chunks[chunk_index + 1][0].start if chunk_index + 1 < len(chunks) else None
+        )
+
         for active_index, active in enumerate(chunk):
             end = active.end
-            # Hold each word's highlight until the next word begins so the
-            # caption never blinks off during the gap between words.
             if active_index + 1 < len(chunk):
+                # Hold the highlight until the next word begins so the caption
+                # never blinks off during the gap between words.
                 end = max(end, chunk[active_index + 1].start)
+            elif next_chunk_start is not None:
+                # Last word of a phrase: keep it on screen into the pause rather
+                # than cutting to a bare frame, but cap the hold so a long
+                # silence doesn't leave stale text sitting there.
+                end = max(end, min(next_chunk_start, active.end + MAX_PHRASE_HOLD))
+
             if end - active.start < MIN_EVENT_DURATION:
                 end = active.start + MIN_EVENT_DURATION
 

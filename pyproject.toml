@@ -96,4 +96,5 @@ exclude = ["tests/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# "." lets test modules import shared fakes from tests.conftest.
+pythonpath = ["src", "."]
