@@ -71,9 +71,16 @@ that measured duration, so nothing drifts out of sync.
 **Word-level caption timing drives the TTS interface.** `TTSProvider.synthesize`
 returns timings, not just a file path, because word-by-word highlighted captions
 are the visual signature of modern short-form video and they need to know when
-each word is actually spoken. edge-tts is the default specifically because it
-reports `WordBoundary` events; providers that cannot are given estimated timings
-weighted by word length, and that limitation is documented rather than hidden.
+each word is actually spoken.
+
+edge-tts is the default because it reports boundary events — but *which* events
+is the service's choice, not ours, and it has changed for the same voice over
+time. The provider therefore resolves timings in three tiers: `WordBoundary`
+events used verbatim; failing that, `SentenceBoundary` events, whose real start
+and duration anchor a length-weighted distribution of that sentence's words;
+failing that, the rendered audio's measured duration across the whole scene.
+Captions stay anchored to real audio in every tier, and the active tier is
+logged at debug level rather than hidden.
 
 **Captions are burned by ffmpeg, not moviepy.** libass renders text far more
 crisply than compositing a text clip per word, and it costs one extra encode

@@ -6,7 +6,7 @@ the rest — the pipeline degrades rather than failing.
 | You want to… | You need |
 |---|---|
 | Generate ideas, scripts, metadata | An LLM key (**required**) |
-| Voiceover with accurate captions | Nothing — edge-tts is keyless |
+| Voiceover with timed captions | Nothing — edge-tts is keyless |
 | Real stock footage | A free Pexels **or** Pixabay key |
 | Live YouTube trend signals | A YouTube Data API key |
 | Upload to your channel | YouTube OAuth credentials |
@@ -177,9 +177,11 @@ ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM   # optional; defaults to "Rachel"
 ```
 
-Trade-off: better voices, but timings are estimated from the rendered audio
-rather than reported per word, so individual caption highlights can drift
-slightly within a scene. Keep `edge` if caption precision matters more.
+Trade-off: better voices, but timings are derived from the rendered audio's
+measured duration rather than reported by the service, so individual caption
+highlights can drift within a scene. Keep `edge` if caption precision matters
+more — it reports boundary events, per word where the voice supports it and
+otherwise per sentence.
 
 ---
 

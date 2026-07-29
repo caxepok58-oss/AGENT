@@ -22,13 +22,19 @@ class TTSProvider(ABC):
         """Render ``text`` to an audio file and report per-word timings."""
 
 
-def approximate_word_timings(text: str, duration: float) -> list[WordTiming]:
-    """Distribute ``duration`` across words, weighted by length.
+def approximate_word_timings(
+    text: str, duration: float, *, offset: float = 0.0
+) -> list[WordTiming]:
+    """Distribute ``duration`` across the words of ``text``, weighted by length.
 
-    Used by providers that do not report real timing. Weighting by character
-    count is crude but noticeably better than equal spacing, because long words
-    genuinely take longer to say. A small constant is added per word so that
-    one-letter words still get visible screen time.
+    Used where per-word timing is unavailable. Weighting by character count is
+    crude but noticeably better than equal spacing, because long words genuinely
+    take longer to say. A small constant is added per word so one-letter words
+    still get visible screen time.
+
+    ``offset`` shifts the result, which lets a caller anchor a span to a real
+    timestamp — e.g. distributing words inside a sentence whose true start and
+    duration came from the synthesizer.
     """
     words = text.split()
     if not words or duration <= 0:
@@ -38,7 +44,7 @@ def approximate_word_timings(text: str, duration: float) -> list[WordTiming]:
     total_weight = sum(weights)
 
     timings: list[WordTiming] = []
-    cursor = 0.0
+    cursor = offset
     for word, weight in zip(words, weights, strict=True):
         span = duration * (weight / total_weight)
         timings.append(WordTiming(word=word, start=round(cursor, 3), end=round(cursor + span, 3)))

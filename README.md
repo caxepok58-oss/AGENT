@@ -87,7 +87,7 @@ pip install -e ".[all,dev]"                    # plus pytest, ruff, mypy
 | Extra | Provides |
 |---|---|
 | `llm-anthropic` / `llm-openai` | Script, idea and metadata generation |
-| `tts` | edge-tts voiceover (no API key, reports real word timings) |
+| `tts` | edge-tts voiceover (no API key, reports timing boundaries) |
 | `tts-elevenlabs` | ElevenLabs voices (higher quality, needs a key) |
 | `video` | moviepy, Pillow, numpy and a bundled ffmpeg |
 | `youtube` | Upload and analytics |
@@ -143,9 +143,13 @@ Worth knowing before you rely on this:
   Pexels or Pixabay key for real footage.
 - **Stock footage is not automatically credited.** Pexels and Pixabay licences
   do not require attribution, but check the current terms yourself.
-- **Word timings are exact only with edge-tts.** ElevenLabs timings are
-  estimated from the audio's real duration, so individual word highlights can
-  drift slightly within a scene.
+- **Caption timing precision varies by provider and voice.** edge-tts reports
+  boundary events, but which kind is up to the service: some voices emit
+  per-word boundaries (exact highlighting), others only per-sentence boundaries,
+  in which case words are distributed inside each sentence's real span. Captions
+  stay anchored to the audio either way; individual word highlights can drift by
+  a fraction of a second in the sentence-level case. ElevenLabs timings are
+  derived from the rendered audio's measured duration.
 - **Music is not included.** Drop your own licensed tracks in `config/music/`.
   Do not use commercial music you have not licensed.
 
