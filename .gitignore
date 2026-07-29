@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Secrets & credentials — never commit these
+.env
+*.env
+client_secret*.json
+youtube_token.json
+token.json
+credentials.json
+*.key
+
+# Local runtime data
+output/**
+!output/.gitkeep
+data/*.db
+data/*.sqlite3
+*.log
+
+# Generated media
+*.mp4
+*.mp3
+*.wav
+*.ass
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

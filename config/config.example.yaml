@@ -1,0 +1,81 @@
+# shorts-agent configuration
+#
+# Copy to config/config.yaml and edit. Secrets (API keys) live in .env, not
+# here — this file only holds non-secret behavior settings so it's safe to
+# commit and version-control per channel/niche.
+
+channel:
+  name: "My Shorts Channel"
+  niche: "personal finance tips for young adults"
+  language: "en"
+  audience: "general"
+  # Persona/voice the LLM writes in — be specific, it strongly shapes output.
+  persona: >
+    An upbeat, concise finance coach who explains one practical money tip
+    per video in plain language, no jargon, no financial advice disclaimers
+    needed because tips are general education, not personalized advice.
+  made_for_kids: false
+  # YouTube video category ID. Common ones: 22 People & Blogs, 27 Education,
+  # 26 Howto & Style, 24 Entertainment, 28 Science & Technology.
+  category_id: "27"
+  default_hashtags: ["#Shorts", "#personalfinance", "#moneytips"]
+
+content:
+  target_duration_seconds: 45
+  min_duration_seconds: 20
+  max_duration_seconds: 90        # hard platform cap is 180s; shorter performs better
+  ideas_per_run: 5
+  words_per_second: 2.3           # used to size scripts to the target duration
+  add_outro_cta: true
+  outro_text: "Follow for a new tip every day!"
+  # Maps to the YouTube Data API status.containsSyntheticMedia field so
+  # uploads are correctly labeled as altered/synthetic content. Keep true
+  # for AI-voiced/AI-visual content. See docs/SETUP.md "Disclosure" section.
+  ai_disclosure: true
+
+trends:
+  providers: ["youtube", "google_trends", "manual"]
+  youtube_region_code: "US"
+  manual_keywords_file: "config/manual_trends.example.yaml"
+  lookback_days: 5
+  max_topics: 15
+
+providers:
+  llm: "anthropic"                # anthropic | openai
+  tts: "edge"                     # edge | elevenlabs
+  visuals: "generated"            # pexels | pixabay | generated (generated needs no API key)
+  edge_tts_voice: "en-US-AndrewNeural"
+
+visuals:
+  width: 1080
+  height: 1920
+  music_dir: "config/music"
+  music_volume_db: -18
+
+captions:
+  enabled: true
+  font: "Arial-Bold"
+  font_size: 90
+  highlight_color: "&H0000D7FF"   # ASS colors are &HAABBGGRR; this is gold
+  base_color: "&H00FFFFFF"        # white
+  outline_color: "&H00000000"     # black outline
+  position: "middle"              # top | middle | bottom
+
+policy:
+  blocklist_file: "config/policy_blocklist.example.yaml"
+  use_llm_moderation: true
+  disallow_duplicate_topics_days: 30
+
+publishing:
+  # "private" is the safe default: videos upload but stay unlisted-to-public
+  # until a human promotes them. Flip auto_publish only once you trust the
+  # pipeline's output quality and have read docs/SETUP.md's policy section.
+  privacy_status: "private"       # private | unlisted | public
+  auto_publish: false
+  max_uploads_per_day: 2
+  default_publish_delay_hours: 4
+  playlist_id: ""
+
+storage:
+  db_path: "data/shorts_agent.db"
+  output_dir: "output"

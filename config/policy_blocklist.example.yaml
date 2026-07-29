@@ -1,0 +1,29 @@
+# Keyword/phrase blocklist checked (case-insensitively, substring match)
+# against every generated idea and script before it proceeds to production.
+# This is a coarse, fast first filter — src/shorts_agent/policy/guardrails.py
+# also runs an optional LLM-based moderation pass for things a keyword list
+# can't catch (see policy.use_llm_moderation in config.yaml).
+#
+# This list is intentionally small and generic. Extend it for your channel's
+# specific risk areas (e.g. a finance channel should block unlicensed
+# investment-advice phrasing; a health channel should block specific medical
+# claims). It is not a substitute for reading YouTube's advertiser-friendly
+# and community guidelines.
+
+categories:
+  hate_harassment:
+    - "slur"
+  dangerous_acts:
+    - "dangerous challenge"
+    - "how to make a weapon"
+    - "how to make explosives"
+  medical_financial_claims:
+    - "guaranteed cure"
+    - "guaranteed returns"
+    - "risk-free investment"
+    - "this cures"
+  misinformation:
+    - "proven hoax"
+    - "fake moon landing"
+  minors_safety:
+    - "child exploitation"

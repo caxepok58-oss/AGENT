@@ -1,0 +1,21 @@
+# Manually curated trend keywords/topics.
+#
+# This provider needs no API key and never fails, so it's a good baseline
+# and a useful supplement to the live YouTube/Google Trends signals — use it
+# for evergreen sub-niches you know convert well, or as a fallback when the
+# live providers are rate-limited or unavailable.
+#
+# `weight` is a relative importance multiplier (1.0 = normal) combined with
+# live signals by the aggregator — see src/shorts_agent/trends/aggregator.py.
+
+topics:
+  - keyword: "budgeting tips"
+    weight: 1.0
+    notes: "Evergreen, consistently decent retention for this niche."
+  - keyword: "side hustle ideas"
+    weight: 1.2
+    notes: "Tends to spike at the start of each month/year."
+  - keyword: "how to save money fast"
+    weight: 1.0
+  - keyword: "investing for beginners"
+    weight: 0.9
