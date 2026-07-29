@@ -40,6 +40,8 @@ class Settings(BaseSettings):
 
     google_trends_enabled: bool = True
 
+    # Read-only trend research needs only an API key; uploading needs OAuth.
+    youtube_api_key: str | None = None
     youtube_client_secrets_file: str = "./client_secret.json"
     youtube_token_file: str = "./youtube_token.json"
 
