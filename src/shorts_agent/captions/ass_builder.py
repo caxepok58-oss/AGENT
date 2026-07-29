@@ -186,7 +186,5 @@ def write_ass(
     height: int = 1920,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        build_ass(timings, config, width=width, height=height), encoding="utf-8"
-    )
+    output_path.write_text(build_ass(timings, config, width=width, height=height), encoding="utf-8")
     return output_path

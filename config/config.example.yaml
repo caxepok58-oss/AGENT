@@ -36,7 +36,8 @@ content:
 trends:
   providers: ["youtube", "google_trends", "manual"]
   youtube_region_code: "US"
-  manual_keywords_file: "config/manual_trends.example.yaml"
+  # Created by `shorts-agent init` from manual_trends.example.yaml.
+  manual_keywords_file: "config/manual_trends.yaml"
   lookback_days: 5
   max_topics: 15
 
@@ -65,7 +66,8 @@ captions:
   position: "middle"              # top | middle | bottom
 
 policy:
-  blocklist_file: "config/policy_blocklist.example.yaml"
+  # Created by `shorts-agent init` from policy_blocklist.example.yaml.
+  blocklist_file: "config/policy_blocklist.yaml"
   use_llm_moderation: true
   disallow_duplicate_topics_days: 30
 

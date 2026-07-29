@@ -61,20 +61,16 @@ class GeneratedVisualProvider(VisualProvider):
         )
         frame = np.repeat(gradient[:, None, :], self.width, axis=1)
 
-        frame *= self._vignette(np)[..., None]
-
-        Image.fromarray(frame.clip(0, 255).astype(np.uint8), mode="RGB").save(path, "PNG")
-        return VisualAsset(
-            scene_index=scene_index, path=str(path), kind="image", source=self.name
-        )
-
-    def _vignette(self, np) -> "object":
-        """Radial brightness falloff, 1.0 at the centre and lowest at the corners."""
+        # Radial brightness falloff: 1.0 at the centre, lowest at the corners,
+        # normalised so the corners sit at radius 1.0.
         y = np.linspace(-1.0, 1.0, self.height, dtype=np.float32)[:, None]
         x = np.linspace(-1.0, 1.0, self.width, dtype=np.float32)[None, :]
-        # Normalised so the corners sit at radius 1.0.
         radius = np.sqrt(x * x + y * y) / np.sqrt(2.0)
-        return np.clip(1.0 - VIGNETTE_STRENGTH * radius * radius, 0.0, 1.0)
+        vignette = np.clip(1.0 - VIGNETTE_STRENGTH * radius * radius, 0.0, 1.0)
+        frame *= vignette[..., None]
+
+        Image.fromarray(frame.clip(0, 255).astype(np.uint8), mode="RGB").save(path, "PNG")
+        return VisualAsset(scene_index=scene_index, path=str(path), kind="image", source=self.name)
 
     def _palette(self, keyword: str, scene_index: int) -> tuple[tuple[int, ...], tuple[int, ...]]:
         digest = hashlib.sha256(keyword.encode()).digest()

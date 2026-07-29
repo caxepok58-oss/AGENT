@@ -109,7 +109,7 @@ def performance_section(top_performers: list[dict]) -> str:
     if not top_performers:
         return ""
     lines = [
-        f"- \"{p['title']}\" — {p.get('views') or 0} views (topic: {p.get('topic') or 'n/a'})"
+        f'- "{p["title"]}" — {p.get("views") or 0} views (topic: {p.get("topic") or "n/a"})'
         for p in top_performers
     ]
     return (

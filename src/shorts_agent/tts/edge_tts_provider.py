@@ -59,7 +59,9 @@ class EdgeTTSProvider(TTSProvider):
             duration_seconds=round(duration, 3),
         )
 
-    async def _stream(self, edge_tts, text: str, output_path: Path) -> tuple[bytes, list[WordTiming]]:
+    async def _stream(
+        self, edge_tts, text: str, output_path: Path
+    ) -> tuple[bytes, list[WordTiming]]:
         communicate = edge_tts.Communicate(text, self.voice, rate=self.rate)
         chunks: list[bytes] = []
         timings: list[WordTiming] = []

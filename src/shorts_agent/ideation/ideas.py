@@ -77,9 +77,7 @@ class IdeaGenerator:
             avoid_section=prompts.avoid_section(recent_topics or []),
         )
 
-        payload = self.llm.complete_json(
-            prompt, schema=IDEA_SCHEMA, system=prompts.SYSTEM_IDEATION
-        )
+        payload = self.llm.complete_json(prompt, schema=IDEA_SCHEMA, system=prompts.SYSTEM_IDEATION)
 
         ideas: list[Idea] = []
         for raw in payload.get("ideas", [])[:count]:

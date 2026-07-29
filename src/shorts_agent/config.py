@@ -80,17 +80,24 @@ class ContentConfig(BaseModel):
     def _check_bounds(self) -> ContentConfig:
         if self.max_duration_seconds > 180:
             raise ConfigError("max_duration_seconds cannot exceed 180s (YouTube Shorts limit)")
-        if not (self.min_duration_seconds <= self.target_duration_seconds <= self.max_duration_seconds):
+        if not (
+            self.min_duration_seconds <= self.target_duration_seconds <= self.max_duration_seconds
+        ):
             raise ConfigError(
                 "target_duration_seconds must be between min_duration_seconds and max_duration_seconds"
             )
         return self
 
 
+TrendProviderName = Literal["youtube", "google_trends", "manual"]
+
+
+def _default_trend_providers() -> list[TrendProviderName]:
+    return ["youtube", "manual"]
+
+
 class TrendsConfig(BaseModel):
-    providers: list[Literal["youtube", "google_trends", "manual"]] = Field(
-        default_factory=lambda: ["youtube", "manual"]
-    )
+    providers: list[TrendProviderName] = Field(default_factory=_default_trend_providers)
     youtube_region_code: str = "US"
     manual_keywords_file: str | None = None
     lookback_days: int = 5

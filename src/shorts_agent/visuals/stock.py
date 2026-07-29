@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Literal
 
 import requests
 
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT = 30
 DOWNLOAD_TIMEOUT = 90
+
+# (download url, asset kind, file suffix)
+SearchResult = tuple[str, Literal["video", "image"], str]
 
 
 class _StockProvider(VisualProvider):
@@ -62,7 +66,9 @@ class _StockProvider(VisualProvider):
             candidate = None
 
         if not candidate:
-            logger.info("%s returned no usable result for %r; generating a card", self.name, keyword)
+            logger.info(
+                "%s returned no usable result for %r; generating a card", self.name, keyword
+            )
             return self._fallback.fetch(keyword, output_dir, scene_index, text=text)
 
         url, kind, suffix = candidate
@@ -85,7 +91,7 @@ class _StockProvider(VisualProvider):
                     if chunk:
                         handle.write(chunk)
 
-    def _search(self, keyword: str) -> tuple[str, str, str] | None:
+    def _search(self, keyword: str) -> SearchResult | None:
         """Return ``(url, kind, file_suffix)`` for the best match, or None."""
         raise NotImplementedError
 
@@ -93,10 +99,15 @@ class _StockProvider(VisualProvider):
 class PexelsVisualProvider(_StockProvider):
     name = "pexels"
 
-    def _search(self, keyword: str) -> tuple[str, str, str] | None:
+    def _search(self, keyword: str) -> SearchResult | None:
         response = self._session.get(
             "https://api.pexels.com/videos/search",
-            params={"query": keyword, "orientation": "portrait", "per_page": 10, "size": "medium"},
+            params={
+                "query": keyword,
+                "orientation": "portrait",
+                "per_page": "10",
+                "size": "medium",
+            },
             headers={"Authorization": self.api_key or ""},
             timeout=TIMEOUT,
         )
@@ -128,10 +139,15 @@ class PexelsVisualProvider(_StockProvider):
 class PixabayVisualProvider(_StockProvider):
     name = "pixabay"
 
-    def _search(self, keyword: str) -> tuple[str, str, str] | None:
+    def _search(self, keyword: str) -> SearchResult | None:
         response = self._session.get(
             "https://pixabay.com/api/videos/",
-            params={"key": self.api_key, "q": keyword, "per_page": 10, "safesearch": "true"},
+            params={
+                "key": self.api_key or "",
+                "q": keyword,
+                "per_page": "10",
+                "safesearch": "true",
+            },
             timeout=TIMEOUT,
         )
         response.raise_for_status()

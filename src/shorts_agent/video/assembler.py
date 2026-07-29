@@ -74,7 +74,9 @@ class VideoAssembler:
             self._burn_captions(master, captions_path, output_path)
             master.unlink(missing_ok=True)
         elif captions_path:
-            logger.warning("Captions file %s missing; shipping video without captions", captions_path)
+            logger.warning(
+                "Captions file %s missing; shipping video without captions", captions_path
+            )
 
         logger.info("Rendered video: %s", output_path)
         return output_path
@@ -162,9 +164,7 @@ class VideoAssembler:
             covered = self._cover(clip)
         else:
             still = ImageClip(str(path)).with_duration(duration)
-            covered = self._cover(still).resized(
-                lambda t: ZOOM_START + ZOOM_PER_SECOND * t
-            )
+            covered = self._cover(still).resized(lambda t: ZOOM_START + ZOOM_PER_SECOND * t)
 
         return CompositeVideoClip(
             [covered.with_position("center")], size=(self.width, self.height)
@@ -206,7 +206,11 @@ class VideoAssembler:
                 music = music.with_effects([afx.AudioLoop(duration=duration)])
             else:
                 music = music.subclipped(0, duration)
-            logger.info("Mixing background music %s at %.1f dB", track.name, self.config.visuals.music_volume_db)
+            logger.info(
+                "Mixing background music %s at %.1f dB",
+                track.name,
+                self.config.visuals.music_volume_db,
+            )
             return music.with_volume_scaled(gain)
         except Exception as exc:  # noqa: BLE001 - music is optional
             logger.warning("Could not load background music %s: %s", track, exc)
@@ -223,16 +227,25 @@ class VideoAssembler:
         command = [
             ffmpeg,
             "-hide_banner",
-            "-loglevel", "error",
+            "-loglevel",
+            "error",
             "-y",
-            "-i", str(source),
-            "-vf", f"ass={filter_path}",
-            "-c:v", VIDEO_CODEC,
-            "-crf", CRF,
-            "-preset", "medium",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            "-c:a", "copy",
+            "-i",
+            str(source),
+            "-vf",
+            f"ass={filter_path}",
+            "-c:v",
+            VIDEO_CODEC,
+            "-crf",
+            CRF,
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-c:a",
+            "copy",
             str(output_path),
         ]
 
