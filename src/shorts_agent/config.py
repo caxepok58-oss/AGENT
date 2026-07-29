@@ -113,7 +113,10 @@ class VisualsConfig(BaseModel):
 
 class CaptionsConfig(BaseModel):
     enabled: bool = True
-    font: str = "Arial-Bold"
+    # Resolved by fontconfig at render time, so it must name a font installed on
+    # the machine doing the render. DejaVu Sans ships with essentially every
+    # Linux distribution; "Arial" or "Helvetica" suit macOS and Windows.
+    font: str = "DejaVu Sans"
     font_size: int = 90
     highlight_color: str = "&H0000D7FF"
     base_color: str = "&H00FFFFFF"

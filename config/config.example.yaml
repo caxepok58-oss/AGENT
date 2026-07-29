@@ -54,7 +54,10 @@ visuals:
 
 captions:
   enabled: true
-  font: "Arial-Bold"
+  # Must be a font installed on the rendering machine (resolved by fontconfig).
+  # DejaVu Sans is present on virtually every Linux box; use "Arial" on
+  # macOS/Windows. Captions are always rendered bold.
+  font: "DejaVu Sans"
   font_size: 90
   highlight_color: "&H0000D7FF"   # ASS colors are &HAABBGGRR; this is gold
   base_color: "&H00FFFFFF"        # white
