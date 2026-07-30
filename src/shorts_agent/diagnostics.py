@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Literal
 
 from shorts_agent.config import AppConfig, get_settings
+from shorts_agent.tts.factory import language_prefix
 
 Status = Literal["ok", "warn", "fail"]
 
@@ -272,9 +273,9 @@ def check_config(config: AppConfig) -> list[Check]:
         checks.append(Check("target duration", "ok", f"{duration:.0f}s"))
 
     voice = config.providers.edge_tts_voice
-    language = config.channel.language.split("-", 1)[0].lower()
+    language = language_prefix(config.channel.language)
     if config.providers.tts == "edge" and "-" in voice:
-        if voice.split("-", 1)[0].lower() != language:
+        if language_prefix(voice) != language:
             checks.append(
                 Check(
                     "voice language",

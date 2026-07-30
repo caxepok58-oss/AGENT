@@ -9,6 +9,16 @@ from shorts_agent.tts.base import TTSProvider
 logger = logging.getLogger(__name__)
 
 
+def language_prefix(value: str) -> str:
+    """First BCP-47 subtag, lowercased: the part that identifies the language itself.
+
+    Shared by the runtime mismatch warning below and the ``doctor`` command's
+    equivalent check, so both compare voice and channel language the same way
+    instead of maintaining two copies that can (and did) drift apart.
+    """
+    return value.strip().split("-", 1)[0].lower()
+
+
 def _warn_on_language_mismatch(config: AppConfig) -> None:
     """Warn when the configured voice does not speak the channel's language.
 
@@ -18,20 +28,21 @@ def _warn_on_language_mismatch(config: AppConfig) -> None:
     a simple prefix comparison.
     """
     voice = config.providers.edge_tts_voice
-    language = config.channel.language.strip().lower()
+    language = config.channel.language.strip()
     if not language or "-" not in voice:
         return
 
-    voice_language = voice.split("-", 1)[0].lower()
-    if voice_language != language.split("-", 1)[0]:
+    voice_language = language_prefix(voice)
+    channel_language = language_prefix(language)
+    if voice_language != channel_language:
         logger.warning(
             "Voice %r speaks %r but channel.language is %r. The narration will be "
             "read with the wrong language's pronunciation — pick a %s-* voice "
             "(`edge-tts --list-voices`).",
             voice,
             voice_language,
-            language,
-            language.split("-", 1)[0],
+            language.lower(),
+            channel_language,
         )
 
 

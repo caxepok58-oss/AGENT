@@ -106,6 +106,16 @@ def test_matching_voice_language_passes(config):
     assert by_name(check_config(config), "voice language").status == "ok"
 
 
+def test_matching_voice_language_passes_with_incidental_whitespace(config):
+    """Regression: this check and the runtime warning in tts/factory.py used to
+    normalize channel.language differently, so stray whitespace could make a
+    correctly matching voice/language pair fail here only."""
+    config.channel.language = " ru "
+    config.providers.edge_tts_voice = "ru-RU-DmitryNeural"
+
+    assert by_name(check_config(config), "voice language").status == "ok"
+
+
 def test_vague_niche_and_persona_warn(config):
     config.channel.niche = "money"
     config.channel.persona = "a coach"
