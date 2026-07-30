@@ -135,6 +135,15 @@ def test_tightening_pass_is_discarded_if_it_is_not_shorter(config):
     assert script.word_count == 40
 
 
+def test_script_prompt_carries_the_idea_target_emotion(config):
+    llm = FakeLLM(json_responses=[script_payload(["Line."])])
+    idea = Idea(title="T", hook="H", premise="P", target_emotion="indignation")
+
+    ScriptWriter(llm, config).write(idea)
+
+    assert "indignation" in llm.prompts[0]
+
+
 def test_script_within_budget_makes_only_one_call(config):
     llm = FakeLLM(json_responses=[script_payload(["Short and sweet."])])
 

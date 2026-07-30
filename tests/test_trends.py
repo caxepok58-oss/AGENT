@@ -3,7 +3,7 @@ from __future__ import annotations
 import requests
 
 from shorts_agent.models import TrendTopic
-from shorts_agent.trends.aggregator import TrendAggregator, _normalize
+from shorts_agent.trends.aggregator import TrendAggregator, _normalize, _trends_timeframe
 from shorts_agent.trends.base import TrendProvider
 from shorts_agent.trends.manual import ManualTrendsProvider
 from shorts_agent.trends.youtube_trends import YouTubeTrendsProvider
@@ -67,6 +67,15 @@ def test_aggregator_sorts_by_score_and_applies_limit():
     merged = TrendAggregator([provider]).collect("finance", limit=2)
 
     assert [t.keyword for t in merged] == ["high", "mid"]
+
+
+def test_lookback_days_maps_to_a_supported_trends_window():
+    """Trends only accepts fixed windows, so a day count rounds up, never down."""
+    assert _trends_timeframe(1) == "now 1-d"
+    assert _trends_timeframe(5) == "now 7-d"
+    assert _trends_timeframe(7) == "now 7-d"
+    assert _trends_timeframe(14) == "today 1-m"
+    assert _trends_timeframe(365) == "today 12-m"
 
 
 def test_manual_provider_reads_weights(tmp_path):

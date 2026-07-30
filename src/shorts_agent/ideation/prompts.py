@@ -76,6 +76,7 @@ SCRIPT_PROMPT = """Write the script for this YouTube Short.
 TITLE: {title}
 HOOK (the video's opening line): {hook}
 PREMISE: {premise}
+FEELING THE VIEWER SHOULD HAVE: {target_emotion}
 NICHE: {niche}
 CREATOR PERSONA: {persona}
 LANGUAGE: {language}

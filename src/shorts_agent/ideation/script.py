@@ -63,6 +63,7 @@ class ScriptWriter:
             title=idea.title,
             hook=idea.hook,
             premise=idea.premise,
+            target_emotion=idea.target_emotion or "curiosity",
             niche=channel.niche,
             persona=channel.persona.strip(),
             language=channel.language,

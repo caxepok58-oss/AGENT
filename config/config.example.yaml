@@ -38,6 +38,8 @@ trends:
   youtube_region_code: "US"
   # Created by `shorts-agent init` from manual_trends.example.yaml.
   manual_keywords_file: "config/manual_trends.yaml"
+  # How far back Google Trends looks. Rounded up to the nearest window Trends
+  # supports (1 day, 7 days, 1 month, 3 months, 12 months).
   lookback_days: 5
   max_topics: 15
 
@@ -72,10 +74,11 @@ policy:
   disallow_duplicate_topics_days: 30
 
 publishing:
-  # "private" is the safe default: videos upload but stay unlisted-to-public
-  # until a human promotes them. Flip auto_publish only once you trust the
-  # pipeline's output quality and have read docs/SETUP.md's policy section.
+  # "private" is the safe default: videos upload but stay hidden until a human
+  # promotes them.
   privacy_status: "private"       # private | unlisted | public
+  # Equivalent to passing --publish on every `run`. Leave false until you have
+  # watched several finished videos and read docs/POLICY.md.
   auto_publish: false
   max_uploads_per_day: 2
   default_publish_delay_hours: 4

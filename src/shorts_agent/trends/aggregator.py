@@ -74,6 +74,19 @@ class TrendAggregator:
         )
 
 
+def _trends_timeframe(lookback_days: int) -> str:
+    """Translate a day count into a Google Trends timeframe expression.
+
+    Trends only accepts a fixed set of relative windows, so the configured value
+    is rounded up to the nearest supported one — a shorter window than requested
+    would silently miss the signals the user asked for.
+    """
+    for days, timeframe in ((1, "now 1-d"), (7, "now 7-d"), (30, "today 1-m"), (90, "today 3-m")):
+        if lookback_days <= days:
+            return timeframe
+    return "today 12-m"
+
+
 def build_trend_providers(config: AppConfig) -> list[TrendProvider]:
     settings = get_settings()
     providers: list[TrendProvider] = []
@@ -91,6 +104,7 @@ def build_trend_providers(config: AppConfig) -> list[TrendProvider]:
                 GoogleTrendsProvider(
                     enabled=settings.google_trends_enabled,
                     geo=config.trends.youtube_region_code,
+                    timeframe=_trends_timeframe(config.trends.lookback_days),
                 )
             )
         elif name == "manual":

@@ -236,6 +236,15 @@ class Pipeline:
         schedule: bool = True,
         idea_count: int | None = None,
     ) -> PipelineResult:
+        # publishing.auto_publish is the config-file equivalent of --publish, so
+        # a user who sets it gets the behaviour its name promises. It defaults to
+        # false, so uploading still requires an explicit opt-in either way.
+        publish = publish or self.config.publishing.auto_publish
+        if publish and not self.config.publishing.auto_publish:
+            logger.info("Publishing enabled for this run")
+        elif publish:
+            logger.info("Publishing enabled by publishing.auto_publish in config")
+
         run_id = uuid.uuid4().hex[:12]
         run_dir = self.config.resolve_path(self.config.storage.output_dir) / run_id
         run_dir.mkdir(parents=True, exist_ok=True)

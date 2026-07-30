@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from shorts_agent.exceptions import PolicyViolation, RateLimitExceeded
+from shorts_agent.exceptions import PolicyViolation, RateLimitExceeded, ShortsAgentError
 from shorts_agent.models import Idea, Scene, Script, TrendTopic
 from shorts_agent.pipeline import Pipeline
 from shorts_agent.storage import Storage
@@ -165,6 +165,40 @@ def test_next_slot_spaces_out_from_the_last_scheduled_upload(config):
 
     # Queued behind the existing slot rather than colliding with it.
     assert slot >= far_future + timedelta(hours=4) - timedelta(seconds=1)
+
+
+def test_auto_publish_config_enables_uploading(config, monkeypatch):
+    """A user who sets auto_publish expects uploads without passing --publish."""
+    config.publishing.auto_publish = True
+    config.publishing.max_uploads_per_day = 1
+    pipeline = make_pipeline(config, FakeLLM())
+    pipeline.storage.start_run("r", config.channel.niche)
+    pipeline.storage.record_upload("vid1", "r", "private", "T", "topic")
+
+    # The cap check only runs when publishing is on, so this proves the config
+    # flag reached the publish path.
+    with pytest.raises(RateLimitExceeded):
+        pipeline.run()
+
+
+def test_auto_publish_defaults_off(config, monkeypatch):
+    """Uploading must stay opt-in: a default config never publishes."""
+    config.publishing.max_uploads_per_day = 1
+    pipeline = make_pipeline(config, FakeLLM())
+    pipeline.storage.start_run("r", config.channel.niche)
+    pipeline.storage.record_upload("vid1", "r", "private", "T", "topic")
+
+    published = []
+    monkeypatch.setattr(pipeline, "publish", lambda *a, **k: published.append(1))
+    monkeypatch.setattr(pipeline, "research", lambda *a, **k: [])
+    monkeypatch.setattr(pipeline, "ideate", lambda *a, **k: [])
+
+    # The run fails on having no ideas — but crucially it got past the upload cap
+    # check, which would have raised first had publishing been enabled.
+    with pytest.raises(ShortsAgentError, match="No usable ideas"):
+        pipeline.run()
+
+    assert published == []
 
 
 def test_run_records_failure_status(config, monkeypatch):
