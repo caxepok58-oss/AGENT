@@ -196,7 +196,42 @@ Audio Library is a safe starting point.
 
 ---
 
-## 8. Configure your channel
+## 8. Non-English channels
+
+The pipeline works in any language. Two settings must agree, and nothing
+downstream can detect it if they do not — an English voice reading Russian text
+produces confident-sounding nonsense:
+
+```yaml
+channel:
+  language: "ru"
+  niche: "личные финансы для начинающих"
+  persona: >
+    Спокойный финансовый коуч, объясняет один практический совет за видео.
+
+providers:
+  edge_tts_voice: "ru-RU-DmitryNeural"   # must match channel.language
+```
+
+A mismatch logs a warning at the start of production. List available voices with
+`edge-tts --list-voices` (there are voices for 70+ locales, all keyless).
+
+Two things to check for a non-Latin script:
+
+- **Captions.** The font must cover your script. `DejaVu Sans` covers Cyrillic,
+  Greek and most European scripts; for CJK, Arabic, Devanagari or Thai, set
+  `captions.font` to a font that covers it (e.g. `Noto Sans CJK`, `Noto Sans
+  Arabic`) and confirm it is installed with `fc-list : family`.
+- **Line length.** `MAX_CHARS_PER_LINE` in `captions/ass_builder.py` is tuned for
+  Latin text. CJK characters are wider, so lower it if captions overflow.
+
+Trend signals also need the right region: set `trends.youtube_region_code` to
+your audience's country (e.g. `RU`, `DE`, `BR`) so the trending chart and Google
+Trends reflect it.
+
+---
+
+## 9. Configure your channel
 
 The single highest-leverage edit in the whole project is `config/config.yaml`:
 

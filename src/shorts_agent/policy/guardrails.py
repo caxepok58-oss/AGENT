@@ -16,7 +16,6 @@ pipeline, not a compliance guarantee — see docs/POLICY.md.
 from __future__ import annotations
 
 import logging
-import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -26,6 +25,7 @@ from shorts_agent.config import AppConfig
 from shorts_agent.exceptions import ProviderError
 from shorts_agent.llm.base import LLMClient, object_schema
 from shorts_agent.models import Idea, PolicyCheckResult, Script
+from shorts_agent.text import normalize_key
 
 logger = logging.getLogger(__name__)
 
@@ -185,4 +185,4 @@ class PolicyGuard:
 
 
 def _normalize(text: str) -> str:
-    return re.sub(r"[^a-z0-9 ]+", "", text.lower()).strip()
+    return normalize_key(text)

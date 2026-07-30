@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections import defaultdict
 
 from shorts_agent.config import AppConfig, get_settings
 from shorts_agent.models import TrendTopic
+from shorts_agent.text import normalize_key
 from shorts_agent.trends.base import TrendProvider
 from shorts_agent.trends.google_trends import GoogleTrendsProvider
 from shorts_agent.trends.manual import ManualTrendsProvider
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _normalize(keyword: str) -> str:
     """Collapse a keyword to a dedup key ignoring case, punctuation and spacing."""
-    return re.sub(r"[^a-z0-9]+", " ", keyword.lower()).strip()
+    return normalize_key(keyword)
 
 
 class TrendAggregator:

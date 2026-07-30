@@ -3,6 +3,7 @@ from __future__ import annotations
 from shorts_agent.models import WordTiming
 from shorts_agent.tts.base import approximate_word_timings
 from shorts_agent.tts.edge_tts_provider import EdgeTTSProvider
+from shorts_agent.tts.factory import build_tts_provider
 
 
 def test_timings_cover_the_whole_duration():
@@ -113,3 +114,35 @@ def test_word_boundaries_win_over_sentence_boundaries(tmp_path):
     _, source = _Provider()._resolve_timings("exact", tmp_path / "a.mp3", words, sentences)
 
     assert source == "WordBoundary"
+
+
+def test_language_voice_mismatch_is_warned_about(config, caplog):
+    """An English voice reading Russian text produces confident nonsense."""
+    config.channel.language = "ru"
+    config.providers.edge_tts_voice = "en-US-AndrewNeural"
+
+    with caplog.at_level("WARNING"):
+        build_tts_provider(config)
+
+    assert "channel.language" in caplog.text
+
+
+def test_matching_language_and_voice_is_silent(config, caplog):
+    config.channel.language = "ru"
+    config.providers.edge_tts_voice = "ru-RU-DmitryNeural"
+
+    with caplog.at_level("WARNING"):
+        build_tts_provider(config)
+
+    assert caplog.text == ""
+
+
+def test_regional_variants_do_not_warn(config, caplog):
+    """en-GB content with an en-US voice is a style choice, not an error."""
+    config.channel.language = "en-GB"
+    config.providers.edge_tts_voice = "en-US-AndrewNeural"
+
+    with caplog.at_level("WARNING"):
+        build_tts_provider(config)
+
+    assert caplog.text == ""

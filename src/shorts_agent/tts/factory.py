@@ -1,8 +1,38 @@
 from __future__ import annotations
 
+import logging
+
 from shorts_agent.config import AppConfig, get_settings
 from shorts_agent.exceptions import ConfigError
 from shorts_agent.tts.base import TTSProvider
+
+logger = logging.getLogger(__name__)
+
+
+def _warn_on_language_mismatch(config: AppConfig) -> None:
+    """Warn when the configured voice does not speak the channel's language.
+
+    This is a quiet, expensive mistake: an English voice reading Russian text
+    produces confident-sounding nonsense, and nothing else in the pipeline can
+    detect it. edge-tts voice names start with a BCP-47 locale, so the check is
+    a simple prefix comparison.
+    """
+    voice = config.providers.edge_tts_voice
+    language = config.channel.language.strip().lower()
+    if not language or "-" not in voice:
+        return
+
+    voice_language = voice.split("-", 1)[0].lower()
+    if voice_language != language.split("-", 1)[0]:
+        logger.warning(
+            "Voice %r speaks %r but channel.language is %r. The narration will be "
+            "read with the wrong language's pronunciation — pick a %s-* voice "
+            "(`edge-tts --list-voices`).",
+            voice,
+            voice_language,
+            language,
+            language.split("-", 1)[0],
+        )
 
 
 def build_tts_provider(config: AppConfig) -> TTSProvider:
@@ -10,6 +40,7 @@ def build_tts_provider(config: AppConfig) -> TTSProvider:
     provider = config.providers.tts
 
     if provider == "edge":
+        _warn_on_language_mismatch(config)
         from shorts_agent.tts.edge_tts_provider import EdgeTTSProvider
 
         return EdgeTTSProvider(voice=config.providers.edge_tts_voice)

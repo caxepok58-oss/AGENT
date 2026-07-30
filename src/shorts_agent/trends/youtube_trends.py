@@ -12,11 +12,11 @@ Read-only access needs only an API key, not OAuth — see SETUP.md.
 from __future__ import annotations
 
 import logging
-import re
 
 import requests
 
 from shorts_agent.models import TrendTopic
+from shorts_agent.text import word_set
 from shorts_agent.trends.base import TrendProvider
 
 logger = logging.getLogger(__name__)
@@ -72,8 +72,13 @@ _STOPWORDS = {
 
 
 def _keywords(text: str) -> set[str]:
-    words = re.findall(r"[a-z0-9']+", text.lower())
-    return {w for w in words if len(w) > 2 and w not in _STOPWORDS}
+    """Extract comparable words from a title, in any script.
+
+    The stopword list is English-only, which is harmless: for other languages it
+    simply removes nothing, and relevance is still driven by the overlap between
+    the niche's words and the video's.
+    """
+    return word_set(text, min_length=3, stopwords=_STOPWORDS)
 
 
 class YouTubeTrendsProvider(TrendProvider):
