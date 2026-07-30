@@ -11,6 +11,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import typer
 from rich.console import Console
@@ -54,7 +55,7 @@ def _load(config_path: str | None) -> AppConfig:
         raise typer.Exit(code=2) from exc
 
 
-def _fail(exc: Exception) -> None:
+def _fail(exc: Exception) -> NoReturn:
     console.print(f"[red]Error:[/red] {exc}")
     raise typer.Exit(code=1) from exc
 
@@ -158,7 +159,6 @@ def trends(
         topics = pipeline.research(limit=limit)
     except ShortsAgentError as exc:
         _fail(exc)
-        return
 
     if not topics:
         console.print(
@@ -193,7 +193,6 @@ def ideate(
         ideas = pipeline.ideate(topics, count=count)
     except ShortsAgentError as exc:
         _fail(exc)
-        return
 
     guard = pipeline._guard()  # noqa: SLF001 - CLI surfaces the same check the run uses
     for i, idea in enumerate(ideas, start=1):
@@ -229,7 +228,6 @@ def run(
         result = pipeline.run(publish=publish, schedule=not no_schedule, idea_count=ideas)
     except ShortsAgentError as exc:
         _fail(exc)
-        return
 
     console.print(f"\n[bold green]Run {result.run_id} complete[/bold green]")
     if result.idea:
@@ -356,7 +354,6 @@ def publish(
         result = pipeline.publish(video, schedule=not no_schedule)
     except ShortsAgentError as exc:
         _fail(exc)
-        return
 
     console.print(f"[green]Uploaded:[/green] {result.url} ({result.privacy_status})")
 
@@ -381,10 +378,8 @@ def auth(
         response = service.channels().list(part="snippet", mine=True).execute()
     except ShortsAgentError as exc:
         _fail(exc)
-        return
     except Exception as exc:  # noqa: BLE001 - surface any Google client failure
         _fail(exc)
-        return
 
     items = response.get("items", [])
     if items:
