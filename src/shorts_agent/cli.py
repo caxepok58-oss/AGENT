@@ -16,6 +16,7 @@ from typing import NoReturn
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.markup import escape
 from rich.table import Table
 
 from shorts_agent.__about__ import __version__
@@ -174,7 +175,12 @@ def trends(
     table.add_column("Sources")
 
     for i, topic in enumerate(topics, start=1):
-        table.add_row(str(i), topic.keyword[:70], f"{topic.score:.1f}", topic.source)
+        # Topic keywords come straight from external sources (video titles,
+        # search terms), so they're escaped before Rich can interpret them as
+        # markup — otherwise a crafted title could render as a clickable link.
+        table.add_row(
+            str(i), escape(topic.keyword[:70]), f"{topic.score:.1f}", escape(topic.source)
+        )
     console.print(table)
 
 
@@ -198,12 +204,14 @@ def ideate(
     for i, idea in enumerate(ideas, start=1):
         check = guard.check_idea(idea)
         status = "[green]ok[/green]" if check.passed else "[red]blocked[/red]"
-        console.print(f"\n[bold]{i}. {idea.title}[/bold]  {status}")
-        console.print(f"   [dim]Hook:[/dim] {idea.hook}")
-        console.print(f"   [dim]Premise:[/dim] {idea.premise}")
-        console.print(f"   [dim]Why it should retain:[/dim] {idea.virality_reasoning}")
+        # Idea text is LLM-generated from prompts that include raw trend
+        # keywords, so it's escaped before Rich can interpret it as markup.
+        console.print(f"\n[bold]{i}. {escape(idea.title)}[/bold]  {status}")
+        console.print(f"   [dim]Hook:[/dim] {escape(idea.hook)}")
+        console.print(f"   [dim]Premise:[/dim] {escape(idea.premise)}")
+        console.print(f"   [dim]Why it should retain:[/dim] {escape(idea.virality_reasoning)}")
         if not check.passed:
-            console.print(f"   [red]Reasons:[/red] {'; '.join(check.reasons)}")
+            console.print(f"   [red]Reasons:[/red] {escape('; '.join(check.reasons))}")
 
 
 @app.command()
@@ -231,12 +239,12 @@ def run(
 
     console.print(f"\n[bold green]Run {result.run_id} complete[/bold green]")
     if result.idea:
-        console.print(f"  Idea:     {result.idea.title}")
+        console.print(f"  Idea:     {escape(result.idea.title)}")
     if result.estimated_duration_seconds:
         console.print(f"  Duration: ~{result.estimated_duration_seconds:.0f}s")
     if result.metadata:
-        console.print(f"  Title:    {result.metadata.title}")
-        console.print(f"  Tags:     {', '.join(result.metadata.tags[:8])}")
+        console.print(f"  Title:    {escape(result.metadata.title)}")
+        console.print(f"  Tags:     {escape(', '.join(result.metadata.tags[:8]))}")
     if result.video_path:
         console.print(f"  Video:    {result.video_path}")
     if result.publish:
@@ -285,17 +293,17 @@ def preview(
 
     if record.get("script_json"):
         script = Script.model_validate_json(record["script_json"])
-        console.print(f"\n[bold]{script.title}[/bold]")
+        console.print(f"\n[bold]{escape(script.title)}[/bold]")
         for scene in script.scenes:
-            console.print(f"  [dim]{scene.index + 1}.[/dim] {scene.text}")
+            console.print(f"  [dim]{scene.index + 1}.[/dim] {escape(scene.text)}")
             if scene.on_screen_text:
-                console.print(f"     [dim]on screen:[/dim] {scene.on_screen_text}")
+                console.print(f"     [dim]on screen:[/dim] {escape(scene.on_screen_text)}")
 
     if record.get("metadata_json"):
         metadata = VideoMetadata.model_validate_json(record["metadata_json"])
-        console.print(f"\n[bold]Title:[/bold] {metadata.title}")
-        console.print(f"[bold]Description:[/bold]\n{metadata.description}")
-        console.print(f"[bold]Tags:[/bold] {', '.join(metadata.tags)}")
+        console.print(f"\n[bold]Title:[/bold] {escape(metadata.title)}")
+        console.print(f"[bold]Description:[/bold]\n{escape(metadata.description)}")
+        console.print(f"[bold]Tags:[/bold] {escape(', '.join(metadata.tags))}")
         console.print(
             f"[bold]Disclosed as synthetic:[/bold] {metadata.contains_synthetic_media} | "
             f"[bold]Privacy:[/bold] {metadata.privacy_status}"
@@ -383,7 +391,9 @@ def auth(
 
     items = response.get("items", [])
     if items:
-        console.print(f"[green]Authorized[/green] as channel: {items[0]['snippet']['title']}")
+        console.print(
+            f"[green]Authorized[/green] as channel: {escape(items[0]['snippet']['title'])}"
+        )
     else:
         console.print(
             "[yellow]Authorized, but no channel was returned.[/yellow] "
@@ -429,7 +439,7 @@ def report(
             record["run_id"],
             (record["created_at"] or "")[:16],
             f"[{colour}]{status}[/{colour}]",
-            (record["idea_title"] or "")[:50],
+            escape((record["idea_title"] or "")[:50]),
         )
     console.print(table)
 
@@ -440,7 +450,9 @@ def report(
         best.add_column("Views", justify="right")
         best.add_column("Likes", justify="right")
         for row in performers:
-            best.add_row((row["title"] or "")[:50], str(row["views"] or 0), str(row["likes"] or 0))
+            best.add_row(
+                escape((row["title"] or "")[:50]), str(row["views"] or 0), str(row["likes"] or 0)
+            )
         console.print(best)
 
 

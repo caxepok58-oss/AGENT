@@ -107,6 +107,28 @@ def test_doctor_passes_with_an_llm_key(runner, config_path, monkeypatch):
     assert "0 problem(s)" in result.output
 
 
+def test_trends_escapes_markup_in_external_topic_keywords(runner, config_path, monkeypatch):
+    """Rich interprets [...] as markup by default, including [link=...] which
+    some terminals render as a clickable hyperlink. Topic keywords are raw
+    external content (video titles anyone with a trending video controls), so
+    a crafted one must survive as literal text, not a hidden link."""
+    from shorts_agent.models import TrendTopic
+    from shorts_agent.pipeline import Pipeline
+
+    malicious = TrendTopic(
+        keyword="Check this [link=https://evil.example/phish]click here[/link] out",
+        source="youtube:most_popular",
+    )
+    monkeypatch.setattr(Pipeline, "research", lambda self, limit=None: [malicious])
+
+    result = runner.invoke(app, ["trends", "--config", config_path])
+
+    assert result.exit_code == 0
+    # Unescaped, Rich would silently consume the tags and show only "click
+    # here" — with no visible trace that a link was ever there.
+    assert "[link=https://evil.example/phish]" in result.output
+
+
 def test_trends_reports_when_no_signals_are_found(runner, config_path):
     """Default providers (youtube, manual) are both unavailable with no key and
     no keywords file configured, so this must degrade cleanly, not crash."""
