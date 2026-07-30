@@ -127,7 +127,8 @@ The settings that matter most:
 ## Development
 
 ```bash
-pytest              # 194 tests, no network access required
+pytest              # 233 tests, no network access required
+pytest --cov=shorts_agent --cov-report=term-missing  # coverage report
 ruff check src/     # lint
 ruff format src/    # format
 mypy src/shorts_agent
