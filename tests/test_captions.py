@@ -5,6 +5,7 @@ from shorts_agent.captions.ass_builder import (
     _escape,
     _timestamp,
     build_ass,
+    chars_per_line,
     chunk_timings,
     write_ass,
 )
@@ -265,3 +266,43 @@ def test_long_chunks_wrap_across_lines():
     document = build_ass(long_words, CaptionsConfig())
 
     assert "\\N" in document
+
+
+def test_line_budget_shrinks_as_the_font_grows():
+    """A fixed character budget overflows the frame at large font sizes."""
+    assert chars_per_line(1080, 60, 65) > chars_per_line(1080, 90, 65)
+
+
+def test_line_budget_scales_with_frame_width():
+    assert chars_per_line(1920, 90, 65) > chars_per_line(1080, 90, 65)
+
+
+def test_line_budget_never_collapses_to_nothing():
+    """An absurd font size must still leave a usable line, not zero characters."""
+    assert chars_per_line(1080, 500, 65) >= 8
+
+
+def test_libass_is_allowed_to_wrap_within_the_margins():
+    """WrapStyle 2 disables wrapping, which let long captions run off the frame."""
+    document = build_ass(words(("x", 0.0, 0.3)), CaptionsConfig())
+
+    assert "WrapStyle: 0" in document
+
+
+def test_a_long_caption_is_split_rather_than_left_on_one_line():
+    long_words = words(
+        ("forgot.", 0.0, 0.3),
+        ("Open", 0.3, 0.6),
+        ("your", 0.6, 0.9),
+        ("bank", 0.9, 1.2),
+    )
+
+    events = [
+        line
+        for line in build_ass(long_words, CaptionsConfig(font_size=90)).splitlines()
+        if line.startswith("Dialogue:")
+    ]
+
+    # "forgot. Open your bank" is 22 characters, over the 18-char budget at
+    # font size 90, so it must be broken across lines.
+    assert "\\N" in events[0]

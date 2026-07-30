@@ -52,7 +52,10 @@ shorts-agent ideate
 # 6. Produce a video locally. Nothing is uploaded.
 shorts-agent run
 
-# 7. Once you have reviewed the file and read docs/POLICY.md:
+# 7. Review it quickly: frames as one image, plus script and metadata.
+shorts-agent preview <run-id>
+
+# 8. Once you have watched the file and read docs/POLICY.md:
 shorts-agent auth              # one-time browser authorization
 shorts-agent publish <run-id>  # upload the video you just reviewed
 ```
@@ -70,6 +73,7 @@ your curated keyword list, without Google Trends it uses the other sources.
 | `trends` | Show current trend signals for your niche |
 | `ideate` | Generate and screen ideas without producing a video |
 | `run` | Full pipeline. Renders locally; add `--publish` to upload |
+| `preview <run-id>` | Contact sheet of frames plus the script and metadata, for fast review |
 | `publish <run-id>` | Upload a previously rendered video after review |
 | `auth` | Authorize this machine to upload to your channel |
 | `report` | Recent runs and how published videos are performing (`--refresh` for fresh view counts) |

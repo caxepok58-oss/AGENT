@@ -135,7 +135,10 @@ The default YouTube Data API allowance is 10,000 units/day per project.
 
 ## A minimum responsible workflow
 
-1. Run `shorts-agent run` (no upload) several times. Watch every video fully.
+1. Run `shorts-agent run` (no upload) several times. Use
+   `shorts-agent preview <run-id>` to see every frame, the script and the
+   metadata at a glance — then watch each video fully, because a contact sheet
+   cannot show pacing, audio or caption timing.
 2. Fix your persona and niche until the output is something you would post under
    your own name.
 3. Read this document and the linked YouTube policies.

@@ -21,8 +21,12 @@ from shorts_agent.models import WordTiming
 _ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}
 
 WORDS_PER_CHUNK = 4
-MAX_CHARS_PER_LINE = 22
 MIN_EVENT_DURATION = 0.08
+# Rough advance width of a bold sans-serif glyph as a fraction of font size.
+# Used only to pre-wrap chunks into pleasing lines; libass enforces the real
+# margins via WrapStyle, so an imprecise estimate cannot cause overflow.
+CHAR_WIDTH_RATIO = 0.58
+MIN_CHARS_PER_LINE = 8
 # How long a finished phrase stays on screen during a pause before it clears.
 MAX_PHRASE_HOLD = 0.6
 # Overlays are secondary to the narration captions, so they render smaller.
@@ -78,13 +82,24 @@ def _color_tag(color: str) -> str:
     return f"{{\\c{value}}}"
 
 
-def _wrap(words: list[str]) -> list[list[str]]:
+def chars_per_line(width: int, font_size: int, margin_h: int) -> int:
+    """Estimate how many characters fit across the frame at this font size.
+
+    A fixed character budget cannot work: 22 characters fits comfortably at font
+    size 60 and runs off both edges at 90. Deriving it from the usable width
+    keeps pre-wrapping sensible whatever the configured size.
+    """
+    usable = max(width - 2 * margin_h, 1)
+    return max(MIN_CHARS_PER_LINE, int(usable / (font_size * CHAR_WIDTH_RATIO)))
+
+
+def _wrap(words: list[str], max_chars: int) -> list[list[str]]:
     """Split a chunk's words into display lines that fit the frame width."""
     lines: list[list[str]] = [[]]
     for word in words:
         current = lines[-1]
         projected = len(" ".join(current + [word]))
-        if current and projected > MAX_CHARS_PER_LINE:
+        if current and projected > max_chars:
             lines.append([word])
         else:
             current.append(word)
@@ -142,11 +157,13 @@ def build_ass(
     overlay_outline = max(2, round(overlay_size * 0.07))
     overlay_alignment, overlay_margin_v = _overlay_placement(config.position, height)
 
+    max_chars = chars_per_line(width, config.font_size, margin_h)
+
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
 PlayResY: {height}
-WrapStyle: 2
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 YCbCr Matrix: TV.709
 
@@ -182,7 +199,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if end - active.start < MIN_EVENT_DURATION:
                 end = active.start + MIN_EVENT_DURATION
 
-            text = _render_chunk(chunk, active_index, config)
+            text = _render_chunk(chunk, active_index, config, max_chars)
             events.append(
                 f"Dialogue: 0,{_timestamp(active.start)},{_timestamp(end)},Default,,0,0,0,,{text}"
             )
@@ -216,10 +233,12 @@ def _overlay_events(overlays: list[Overlay]) -> list[str]:
     return events
 
 
-def _render_chunk(chunk: list[WordTiming], active_index: int, config: CaptionsConfig) -> str:
+def _render_chunk(
+    chunk: list[WordTiming], active_index: int, config: CaptionsConfig, max_chars: int
+) -> str:
     """Render one chunk with the active word in the highlight colour."""
     words = [_escape(t.word) for t in chunk]
-    lines = _wrap(words)
+    lines = _wrap(words, max_chars)
 
     highlight = _color_tag(config.highlight_color)
     base = _color_tag(config.base_color)

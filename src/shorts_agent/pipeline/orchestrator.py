@@ -214,7 +214,9 @@ class Pipeline:
         service = get_youtube_service(
             settings.youtube_client_secrets_file, settings.youtube_token_file
         )
-        result = YouTubeUploader(service).upload(Path(video.video_path), metadata)
+        result = YouTubeUploader(service).upload(
+            Path(video.video_path), metadata, thumbnail_path=self._thumbnail(video)
+        )
 
         self.storage.record_upload(
             youtube_video_id=result.youtube_video_id,
@@ -330,6 +332,21 @@ class Pipeline:
         return len(stats)
 
     # --- helpers ------------------------------------------------------
+
+    def _thumbnail(self, video: GeneratedVideo) -> Path | None:
+        """Best-effort thumbnail from a frame of the video.
+
+        Never fails an upload: the Shorts feed uses a frame from the video
+        anyway, and setting a custom thumbnail requires a verified channel.
+        """
+        from shorts_agent.video.frames import FrameExtractionError, thumbnail
+
+        video_path = Path(video.video_path)
+        try:
+            return thumbnail(video_path, video_path.parent / "thumbnail.jpg")
+        except FrameExtractionError as exc:
+            logger.info("Skipping thumbnail: %s", exc)
+            return None
 
     def _guard(self) -> PolicyGuard:
         return PolicyGuard(

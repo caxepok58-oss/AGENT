@@ -247,9 +247,77 @@ def run(
             console.print(f"  Goes live: {result.publish.publish_at.isoformat()}")
     elif result.video_path:
         console.print(
-            "\n[yellow]Not uploaded.[/yellow] Review the video, then run with "
-            "[bold]--publish[/bold] to upload."
+            f"\n[yellow]Not uploaded.[/yellow] Review it with "
+            f"[bold]shorts-agent preview {result.run_id}[/bold], then "
+            f"[bold]shorts-agent publish {result.run_id}[/bold] to upload."
         )
+
+
+@app.command()
+def preview(
+    run_id: str = typer.Argument(..., help="Run id from a previous `run` command."),
+    config: str | None = ConfigOption,
+    frames: int = typer.Option(6, "--frames", "-f", help="How many frames to sample."),
+    thumbnail: bool = typer.Option(
+        False, "--thumbnail", help="Also write a thumbnail candidate JPEG."
+    ),
+    verbose: bool = VerboseOption,
+) -> None:
+    """Review a rendered video: a contact sheet of frames, plus its script and metadata."""
+    _setup_logging(verbose)
+    from shorts_agent.video.frames import (
+        FrameExtractionError,
+        contact_sheet,
+        probe_duration,
+    )
+    from shorts_agent.video.frames import thumbnail as make_thumbnail
+
+    pipeline = Pipeline(_load(config))
+    record = pipeline.storage.get_run(run_id)
+    if not record:
+        console.print(f"[red]No run found with id {run_id}[/red]")
+        raise typer.Exit(code=1)
+
+    video_path = Path(record["video_path"] or "")
+    if not video_path.exists():
+        console.print(
+            f"[red]Run {run_id} has no rendered video[/red] (status: {record.get('status')})"
+        )
+        raise typer.Exit(code=1)
+
+    if record.get("script_json"):
+        script = Script.model_validate_json(record["script_json"])
+        console.print(f"\n[bold]{script.title}[/bold]")
+        for scene in script.scenes:
+            console.print(f"  [dim]{scene.index + 1}.[/dim] {scene.text}")
+            if scene.on_screen_text:
+                console.print(f"     [dim]on screen:[/dim] {scene.on_screen_text}")
+
+    if record.get("metadata_json"):
+        metadata = VideoMetadata.model_validate_json(record["metadata_json"])
+        console.print(f"\n[bold]Title:[/bold] {metadata.title}")
+        console.print(f"[bold]Description:[/bold]\n{metadata.description}")
+        console.print(f"[bold]Tags:[/bold] {', '.join(metadata.tags)}")
+        console.print(
+            f"[bold]Disclosed as synthetic:[/bold] {metadata.contains_synthetic_media} | "
+            f"[bold]Privacy:[/bold] {metadata.privacy_status}"
+        )
+
+    try:
+        duration = probe_duration(video_path)
+        console.print(f"\n[bold]Video:[/bold] {video_path} ({duration:.1f}s)")
+        sheet = contact_sheet(video_path, video_path.parent / "contact_sheet.png", count=frames)
+        console.print(f"[green]Contact sheet:[/green] {sheet}")
+        if thumbnail:
+            thumb = make_thumbnail(video_path, video_path.parent / "thumbnail.jpg")
+            console.print(f"[green]Thumbnail:[/green] {thumb}")
+    except FrameExtractionError as exc:
+        console.print(f"[yellow]Could not build the contact sheet:[/yellow] {exc}")
+
+    console.print(
+        "\nWatch the video itself before publishing — a contact sheet cannot show "
+        "audio, pacing, or caption timing."
+    )
 
 
 @app.command()
