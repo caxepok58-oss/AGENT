@@ -60,6 +60,18 @@ def test_blocklist_match_is_case_insensitive(config, tmp_path):
     assert result.passed is False
 
 
+def test_blocklist_match_folds_eszett_like_casefold(config, tmp_path):
+    """.lower() leaves German ß alone, so a blocklisted "straße" would miss an
+    all-caps "STRASSE" in the script; casefold() maps both to "strasse"."""
+    path = tmp_path / "blocklist.yaml"
+    path.write_text(yaml.safe_dump({"categories": {"test": ["straße"]}}))
+    config.policy.blocklist_file = str(path)
+
+    result = PolicyGuard(config).check_idea(idea(premise="Welcome to STRASSE avenue."))
+
+    assert result.passed is False
+
+
 def test_missing_blocklist_file_disables_keyword_check(config, tmp_path):
     config.policy.blocklist_file = str(tmp_path / "absent.yaml")
 

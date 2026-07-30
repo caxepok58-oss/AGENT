@@ -108,7 +108,7 @@ class PolicyGuard:
             return {}
         categories = raw.get("categories", {})
         return {
-            str(name): [str(p).lower() for p in phrases or []]
+            str(name): [str(p).casefold() for p in phrases or []]
             for name, phrases in categories.items()
         }
 
@@ -127,7 +127,7 @@ class PolicyGuard:
         return PolicyCheckResult(passed=not reasons, reasons=reasons)
 
     def _keyword_reasons(self, text: str) -> list[str]:
-        haystack = text.lower()
+        haystack = text.casefold()
         reasons = []
         for category, phrases in self._blocklist.items():
             for phrase in phrases:
