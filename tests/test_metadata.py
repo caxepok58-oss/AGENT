@@ -91,6 +91,14 @@ def test_channel_default_hashtags_are_merged_in():
     assert "#finance" in result
 
 
+def test_non_latin_hashtags_keep_their_combining_marks():
+    """A \\w-based strip would mangle "#कैसे" into "#कस" by dropping vowel marks."""
+    result = _clean_hashtags(["कैसे", "#सीखें"], [])
+
+    assert "#कैसे" in result
+    assert "#सीखें" in result
+
+
 def test_description_appends_hashtags_once():
     body = "A useful tip.\n\n#old #tags"
 

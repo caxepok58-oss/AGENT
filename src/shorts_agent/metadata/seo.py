@@ -19,6 +19,7 @@ import re
 from shorts_agent.config import AppConfig
 from shorts_agent.llm.base import LLMClient, object_schema
 from shorts_agent.models import Idea, Script, VideoMetadata
+from shorts_agent.text import strip_non_word
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +171,8 @@ def _clean_hashtags(raw: list, defaults: list[str]) -> list[str]:
             continue
         if not tag.startswith("#"):
             tag = f"#{tag}"
-        tag = re.sub(r"[^#\w]", "", tag)
-        key = tag.lower()
+        tag = strip_non_word(tag, allow="#")
+        key = tag.casefold()
         if len(tag) < 2 or key in seen:
             continue
         seen.add(key)

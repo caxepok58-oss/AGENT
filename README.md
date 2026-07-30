@@ -127,7 +127,7 @@ The settings that matter most:
 ## Development
 
 ```bash
-pytest              # 124 tests, no network access required
+pytest              # 194 tests, no network access required
 ruff check src/     # lint
 ruff format src/    # format
 mypy src/shorts_agent

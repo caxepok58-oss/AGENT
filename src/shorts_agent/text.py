@@ -52,6 +52,17 @@ def normalize_key(text: str) -> str:
     return "".join(out)
 
 
+def strip_non_word(text: str, *, allow: str = "") -> str:
+    """Remove characters that are neither word characters nor in ``allow``.
+
+    A ``\\w``-based regex would do this for the ASCII case, but (as above) it
+    silently drops combining marks instead of just the punctuation/whitespace
+    it's meant to strip — e.g. stripping stray characters from a hashtag while
+    keeping its leading ``#`` would mangle "#कैसे" into "#कस".
+    """
+    return "".join(char for char in text if _is_word_char(char) or char in allow)
+
+
 def word_set(text: str, *, min_length: int = 3, stopwords: set[str] | None = None) -> set[str]:
     """Extract distinct words for relevance comparison, in any script.
 
