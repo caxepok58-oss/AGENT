@@ -265,6 +265,11 @@ publishing:
 
 ## Troubleshooting
 
+**Start with `shorts-agent doctor`.** It checks ffmpeg and libass, the caption
+font, every configured key, OAuth state, and the config values that quietly
+degrade output — and tells you the fix for each. It makes no API calls, so it is
+free to run at any time.
+
 **`Config file not found`** — run `shorts-agent init`, or point
 `SHORTS_AGENT_CONFIG` at your file.
 

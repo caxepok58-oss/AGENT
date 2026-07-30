@@ -43,8 +43,8 @@ shorts-agent init
 # 3. Add your keys to .env, then set your niche and persona in config/config.yaml.
 #    The niche and persona drive everything the agent writes — be specific.
 
-# 4. Check your setup. Works with no keys at all (uses your curated keywords).
-shorts-agent trends
+# 4. Check your setup: what works, what will fall back, what will fail.
+shorts-agent doctor
 
 # 5. See what it would make, without producing anything.
 shorts-agent ideate
@@ -66,6 +66,7 @@ your curated keyword list, without Google Trends it uses the other sources.
 | Command | What it does |
 |---|---|
 | `init` | Copy example config and `.env` into place |
+| `doctor` | Check ffmpeg, fonts, keys and config; report what will silently degrade |
 | `trends` | Show current trend signals for your niche |
 | `ideate` | Generate and screen ideas without producing a video |
 | `run` | Full pipeline. Renders locally; add `--publish` to upload |

@@ -113,6 +113,38 @@ def init(
 
 
 @app.command()
+def doctor(
+    config: str | None = ConfigOption,
+    verbose: bool = VerboseOption,
+) -> None:
+    """Check your setup and report what works, what will degrade, and what will fail."""
+    _setup_logging(verbose)
+    from shorts_agent.diagnostics import run_all, summarize
+
+    checks = run_all(_load(config))
+
+    symbols = {"ok": "[green]✓[/green]", "warn": "[yellow]![/yellow]", "fail": "[red]✗[/red]"}
+    for check in checks:
+        console.print(f"{symbols[check.status]} {check.name}: {check.detail}")
+        if check.fix and check.status != "ok":
+            console.print(f"   [dim]→ {check.fix}[/dim]")
+
+    ok, warn, fail = summarize(checks)
+    console.print(f"\n{ok} ok, {warn} warning(s), {fail} problem(s)")
+
+    if fail:
+        console.print("[red]Some parts of the pipeline cannot run.[/red] Fix the ✗ items above.")
+        raise typer.Exit(code=1)
+    if warn:
+        console.print(
+            "[yellow]Everything runs, but some features will fall back.[/yellow] "
+            "The ! items explain what you would gain by configuring them."
+        )
+    else:
+        console.print("[green]Everything is configured.[/green]")
+
+
+@app.command()
 def trends(
     config: str | None = ConfigOption,
     limit: int = typer.Option(15, "--limit", "-n", help="Maximum topics to show."),
