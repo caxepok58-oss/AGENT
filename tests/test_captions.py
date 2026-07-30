@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from shorts_agent.captions.ass_builder import (
+    Overlay,
     _escape,
     _timestamp,
     build_ass,
@@ -176,6 +177,86 @@ def test_write_ass_creates_parent_directories(tmp_path):
 
     assert target.exists()
     assert "[Script Info]" in target.read_text(encoding="utf-8")
+
+
+def test_overlay_declares_its_own_style():
+    document = build_ass(words(("x", 0.0, 0.3)), CaptionsConfig())
+    styles = [line.split(",")[0] for line in document.splitlines() if line.startswith("Style:")]
+
+    assert styles == ["Style: Default", "Style: Overlay"]
+
+
+def test_overlay_event_uses_the_overlay_style_and_span():
+    document = build_ass(
+        words(("x", 0.0, 3.0)),
+        CaptionsConfig(),
+        overlays=[Overlay(text="Sort by amount", start=0.5, end=2.5)],
+    )
+
+    event = next(line for line in document.splitlines() if ",Overlay," in line)
+    assert event.startswith("Dialogue: 1,0:00:00.50,0:00:02.50,Overlay")
+    assert event.endswith("Sort by amount")
+
+
+def test_overlay_sits_opposite_middle_captions():
+    """Overlays must not land on top of the captions."""
+    document = build_ass(words(("x", 0.0, 0.3)), CaptionsConfig(position="middle"))
+    overlay_style = next(
+        line for line in document.splitlines() if line.startswith("Style: Overlay")
+    )
+
+    # Field 19 is Alignment; 8 is top-centre.
+    assert overlay_style.split(",")[18] == "8"
+
+
+def test_overlay_moves_to_the_bottom_when_captions_are_at_the_top():
+    document = build_ass(words(("x", 0.0, 0.3)), CaptionsConfig(position="top"))
+    overlay_style = next(
+        line for line in document.splitlines() if line.startswith("Style: Overlay")
+    )
+
+    assert overlay_style.split(",")[18] == "2"  # bottom-centre
+
+
+def test_overlay_renders_smaller_than_the_captions():
+    document = build_ass(words(("x", 0.0, 0.3)), CaptionsConfig(font_size=100))
+    sizes = {
+        line.split(",")[0]: int(line.split(",")[2])
+        for line in document.splitlines()
+        if line.startswith("Style:")
+    }
+
+    assert sizes["Style: Overlay"] < sizes["Style: Default"]
+
+
+def test_overlay_text_is_escaped():
+    document = build_ass(
+        words(("x", 0.0, 0.3)),
+        CaptionsConfig(),
+        overlays=[Overlay(text="{\\b1}injected", start=0.0, end=1.0)],
+    )
+
+    event = next(line for line in document.splitlines() if ",Overlay," in line)
+    assert "{" not in event.split(",,")[-1]
+
+
+def test_empty_or_inverted_overlays_are_dropped():
+    document = build_ass(
+        words(("x", 0.0, 0.3)),
+        CaptionsConfig(),
+        overlays=[
+            Overlay(text="   ", start=0.0, end=1.0),
+            Overlay(text="backwards", start=2.0, end=1.0),
+        ],
+    )
+
+    assert ",Overlay," not in document
+
+
+def test_no_overlays_produces_no_overlay_events():
+    document = build_ass(words(("x", 0.0, 0.3)), CaptionsConfig())
+
+    assert ",Overlay," not in document
 
 
 def test_long_chunks_wrap_across_lines():

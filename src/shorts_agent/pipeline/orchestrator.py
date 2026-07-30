@@ -25,7 +25,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from shorts_agent.captions import write_ass
+from shorts_agent.captions import Overlay, write_ass
 from shorts_agent.config import AppConfig, ensure_runtime_dirs, get_settings
 from shorts_agent.exceptions import PolicyViolation, RateLimitExceeded, ShortsAgentError
 from shorts_agent.ideation import IdeaGenerator, ScriptWriter
@@ -130,6 +130,7 @@ class Pipeline:
         audios: list[SceneAudio] = []
         visuals: list[VisualAsset] = []
         timings: list[WordTiming] = []
+        overlays: list[Overlay] = []
         offset = 0.0
 
         for scene in script.scenes:
@@ -145,6 +146,16 @@ class Pipeline:
                 w.model_copy(update={"start": w.start + offset, "end": w.end + offset})
                 for w in audio.word_timings
             )
+
+            if scene.on_screen_text:
+                overlays.append(
+                    Overlay(
+                        text=scene.on_screen_text,
+                        start=offset,
+                        end=offset + audio.duration_seconds,
+                    )
+                )
+
             offset += audio.duration_seconds
 
             visuals.append(
@@ -168,6 +179,7 @@ class Pipeline:
                 timings,
                 run_dir / "captions.ass",
                 self.config.captions,
+                overlays=overlays,
                 width=self.config.visuals.width,
                 height=self.config.visuals.height,
             )

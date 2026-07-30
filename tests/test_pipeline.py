@@ -252,10 +252,13 @@ def test_produce_offsets_scene_timings_across_the_whole_video(config, monkeypatc
     monkeypatch.setattr(
         "shorts_agent.pipeline.orchestrator.build_visual_provider", lambda c: StubVisuals()
     )
-    monkeypatch.setattr(
-        "shorts_agent.pipeline.orchestrator.write_ass",
-        lambda timings, path, cfg, **kw: captured.setdefault("timings", timings) or path,
-    )
+
+    def fake_write_ass(timings, path, cfg, **kwargs):
+        captured["timings"] = timings
+        captured["overlays"] = kwargs.get("overlays")
+        return path
+
+    monkeypatch.setattr("shorts_agent.pipeline.orchestrator.write_ass", fake_write_ass)
 
     class StubAssembler:
         def __init__(self, config):
@@ -274,11 +277,17 @@ def test_produce_offsets_scene_timings_across_the_whole_video(config, monkeypatc
         title="T",
         scenes=[
             Scene(index=0, text="one", visual_keyword="a"),
-            Scene(index=1, text="two", visual_keyword="b"),
+            Scene(index=1, text="two", visual_keyword="b", on_screen_text="Emphasis"),
         ],
     )
 
     _, total = pipeline.produce(script, config.resolve_path("output/run1"))
+
+    # A scene's on_screen_text must reach the caption track, spanning that
+    # scene's own slice of the timeline.
+    overlays = captured["overlays"]
+    assert [o.text for o in overlays] == ["Emphasis"]
+    assert (overlays[0].start, overlays[0].end) == (2.0, 4.0)
 
     # Scene 1's word starts at 2.0s, not 0.0s.
     assert [t.start for t in captured["timings"]] == [0.0, 2.0]

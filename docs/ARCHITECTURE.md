@@ -87,6 +87,12 @@ crisply than compositing a text clip per word, and it costs one extra encode
 instead of hundreds of per-frame composites. This is why the assembler is two
 stages: moviepy writes a master, ffmpeg burns captions onto it.
 
+**Scene emphasis text rides the same ASS file.** A scene's `on_screen_text` is
+emitted as a second ASS style rather than a separate render pass, so it costs
+nothing extra. It is placed on the opposite side of the frame from the captions —
+if captions move to the top via config, overlays move to the bottom — because
+the two would otherwise collide.
+
 **Footage is cropped, never letterboxed.** Source clips are scaled to cover
 1080×1920 and centre-cropped. Black bars read as low-effort in the feed; losing
 the edges of a shot does not.

@@ -17,6 +17,7 @@ losing the edges of a shot, because black bars read as low-effort in the feed.
 from __future__ import annotations
 
 import logging
+import random
 import shutil
 import subprocess
 from pathlib import Path
@@ -197,7 +198,10 @@ class VideoAssembler:
         if not tracks:
             return None
 
-        track = tracks[0]
+        # Chosen at random rather than always the first: a channel that supplies
+        # several tracks should not have every video share one bed, which makes
+        # a feed of them sound mass-produced.
+        track = random.choice(tracks)
         gain = 10 ** (self.config.visuals.music_volume_db / 20)
 
         try:

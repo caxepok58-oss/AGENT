@@ -11,6 +11,7 @@ on screen at a time, the currently spoken word picked out in an accent colour.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from shorts_agent.config import CaptionsConfig
@@ -24,6 +25,17 @@ MAX_CHARS_PER_LINE = 22
 MIN_EVENT_DURATION = 0.08
 # How long a finished phrase stays on screen during a pause before it clears.
 MAX_PHRASE_HOLD = 0.6
+# Overlays are secondary to the narration captions, so they render smaller.
+OVERLAY_SIZE_RATIO = 0.62
+
+
+@dataclass(frozen=True)
+class Overlay:
+    """A short emphasis line shown for one scene, opposite the captions."""
+
+    text: str
+    start: float
+    end: float
 
 
 def _timestamp(seconds: float) -> str:
@@ -108,10 +120,15 @@ def build_ass(
     timings: list[WordTiming],
     config: CaptionsConfig,
     *,
+    overlays: list[Overlay] | None = None,
     width: int = 1080,
     height: int = 1920,
 ) -> str:
-    """Render an ASS subtitle document for ``timings``."""
+    """Render an ASS subtitle document for ``timings``.
+
+    ``overlays`` are per-scene emphasis lines shown opposite the captions, so the
+    two never collide.
+    """
     alignment = _ALIGNMENT.get(config.position, 5)
     # Outline and shadow scale with the font so captions stay legible when the
     # font size is tuned, and a generous vertical margin keeps text clear of
@@ -120,6 +137,10 @@ def build_ass(
     shadow = max(1, round(config.font_size * 0.03))
     margin_v = round(height * 0.14)
     margin_h = round(width * 0.06)
+
+    overlay_size = round(config.font_size * OVERLAY_SIZE_RATIO)
+    overlay_outline = max(2, round(overlay_size * 0.07))
+    overlay_alignment, overlay_margin_v = _overlay_placement(config.position, height)
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -132,6 +153,7 @@ YCbCr Matrix: TV.709
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Default,{config.font},{config.font_size},{config.base_color},{config.highlight_color},{config.outline_color},&H64000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Overlay,{config.font},{overlay_size},{config.highlight_color},{config.highlight_color},{config.outline_color},&H64000000,-1,0,0,0,100,100,0,0,1,{overlay_outline},{shadow},{overlay_alignment},{margin_h},{margin_h},{overlay_margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -165,7 +187,33 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Dialogue: 0,{_timestamp(active.start)},{_timestamp(end)},Default,,0,0,0,,{text}"
             )
 
+    events.extend(_overlay_events(overlays or []))
     return header + "\n".join(events) + "\n"
+
+
+def _overlay_placement(caption_position: str, height: int) -> tuple[int, int]:
+    """Put overlays on the opposite side of the frame from the captions.
+
+    Captions move around via config; overlays must not land on top of them. The
+    margin also keeps text clear of the Shorts UI, which occupies the bottom of
+    the frame and the top-right corner.
+    """
+    if caption_position == "top":
+        return _ALIGNMENT["bottom"], round(height * 0.28)
+    return _ALIGNMENT["top"], round(height * 0.10)
+
+
+def _overlay_events(overlays: list[Overlay]) -> list[str]:
+    events: list[str] = []
+    for overlay in overlays:
+        text = _escape(overlay.text)
+        if not text or overlay.end <= overlay.start:
+            continue
+        events.append(
+            f"Dialogue: 1,{_timestamp(overlay.start)},{_timestamp(overlay.end)},"
+            f"Overlay,,0,0,0,,{text}"
+        )
+    return events
 
 
 def _render_chunk(chunk: list[WordTiming], active_index: int, config: CaptionsConfig) -> str:
@@ -196,9 +244,13 @@ def write_ass(
     output_path: Path,
     config: CaptionsConfig,
     *,
+    overlays: list[Overlay] | None = None,
     width: int = 1080,
     height: int = 1920,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(build_ass(timings, config, width=width, height=height), encoding="utf-8")
+    output_path.write_text(
+        build_ass(timings, config, overlays=overlays, width=width, height=height),
+        encoding="utf-8",
+    )
     return output_path
