@@ -273,6 +273,28 @@ def test_pixabay_parses_the_videos_dict_and_picks_the_best_variant(tmp_path):
     assert Path(asset.path).read_bytes() == b"pixabay-bytes"
 
 
+def test_pixabay_redacts_its_api_key_from_a_leaked_url_in_logs(tmp_path, caplog):
+    """Unlike Pexels (auth header), Pixabay sends its key as a URL query param, and
+    a real connection-level exception embeds the full request URL in its message —
+    that key must never reach the logs."""
+    import requests
+
+    provider = PixabayVisualProvider(
+        "super-secret-pixabay-key",
+        session=FakeSession(
+            requests.ConnectionError(
+                "Max retries exceeded with url: /api/videos/?key=super-secret-pixabay-key&q=cats"
+            )
+        ),
+    )
+
+    with caplog.at_level("WARNING"):
+        asset = provider.fetch("cats", tmp_path, scene_index=0)
+
+    assert asset.source == "generated"
+    assert "super-secret-pixabay-key" not in caplog.text
+
+
 def test_pixabay_falls_back_when_hits_have_no_videos_dict(tmp_path):
     search_response = FakeResponse(json_data={"hits": [{"id": 1}]})
     provider = PixabayVisualProvider("key", session=FakeSession(search_response))

@@ -18,6 +18,7 @@ from typing import Literal
 import requests
 
 from shorts_agent.models import VisualAsset
+from shorts_agent.redact import redact
 from shorts_agent.visuals.base import VisualProvider
 from shorts_agent.visuals.generated import GeneratedVisualProvider
 
@@ -62,7 +63,9 @@ class _StockProvider(VisualProvider):
         try:
             candidate = self._search(keyword)
         except requests.RequestException as exc:
-            logger.warning("%s search failed for %r: %s", self.name, keyword, exc)
+            logger.warning(
+                "%s search failed for %r: %s", self.name, keyword, redact(str(exc), self.api_key)
+            )
             candidate = None
 
         if not candidate:
@@ -78,7 +81,9 @@ class _StockProvider(VisualProvider):
         try:
             self._download(url, path)
         except requests.RequestException as exc:
-            logger.warning("%s download failed for %r: %s", self.name, keyword, exc)
+            logger.warning(
+                "%s download failed for %r: %s", self.name, keyword, redact(str(exc), self.api_key)
+            )
             return self._fallback.fetch(keyword, output_dir, scene_index, text=text)
 
         return VisualAsset(scene_index=scene_index, path=str(path), kind=kind, source=self.name)

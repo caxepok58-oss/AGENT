@@ -16,6 +16,7 @@ import logging
 import requests
 
 from shorts_agent.models import TrendTopic
+from shorts_agent.redact import redact
 from shorts_agent.text import word_set
 from shorts_agent.trends.base import TrendProvider
 
@@ -116,7 +117,10 @@ class YouTubeTrendsProvider(TrendProvider):
             if self.use_search:
                 topics.extend(self._fetch_search(niche, limit))
         except requests.RequestException as exc:
-            logger.warning("YouTube trends fetch failed, continuing without it: %s", exc)
+            logger.warning(
+                "YouTube trends fetch failed, continuing without it: %s",
+                redact(str(exc), self.api_key),
+            )
             return []
 
         return topics[:limit]

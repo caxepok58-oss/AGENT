@@ -143,3 +143,21 @@ def test_youtube_provider_returns_empty_on_network_error(monkeypatch):
     monkeypatch.setattr(provider, "_get", boom)
 
     assert provider.fetch("finance") == []
+
+
+def test_youtube_provider_redacts_its_api_key_from_a_leaked_url_in_logs(monkeypatch, caplog):
+    """A real connection-level exception embeds the full request URL, including
+    the ?key=... query param, in its message. That must never reach the logs."""
+    provider = YouTubeTrendsProvider(api_key="super-secret-key")
+
+    def boom(endpoint, params):
+        raise requests.ConnectionError(
+            "Max retries exceeded with url: /videos?key=super-secret-key&chart=mostPopular"
+        )
+
+    monkeypatch.setattr(provider, "_get", boom)
+
+    with caplog.at_level("WARNING"):
+        assert provider.fetch("finance") == []
+
+    assert "super-secret-key" not in caplog.text
