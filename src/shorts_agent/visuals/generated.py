@@ -69,7 +69,9 @@ class GeneratedVisualProvider(VisualProvider):
         vignette = np.clip(1.0 - VIGNETTE_STRENGTH * radius * radius, 0.0, 1.0)
         frame *= vignette[..., None]
 
-        Image.fromarray(frame.clip(0, 255).astype(np.uint8), mode="RGB").save(path, "PNG")
+        # mode is inferred from the array's (H, W, 3) uint8 shape; passing it
+        # explicitly is deprecated and slated for removal in Pillow 13.
+        Image.fromarray(frame.clip(0, 255).astype(np.uint8)).save(path, "PNG")
         return VisualAsset(scene_index=scene_index, path=str(path), kind="image", source=self.name)
 
     def _palette(self, keyword: str, scene_index: int) -> tuple[tuple[int, ...], tuple[int, ...]]:
