@@ -23,7 +23,7 @@ _STREAM_THRESHOLD = 16000
 class AnthropicClient(LLMClient):
     def __init__(
         self,
-        model: str = "claude-opus-5",
+        model: str = "claude-opus-5-5",
         *,
         api_key: str | None = None,
         max_tokens: int = 8192,

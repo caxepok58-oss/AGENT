@@ -47,7 +47,7 @@ Windows use `Arial` or `Helvetica`. Check what is available with `fc-list : fami
 
 ```bash
 LLM_PROVIDER=anthropic
-LLM_MODEL=claude-opus-5
+LLM_MODEL=claude-opus-5-5
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 

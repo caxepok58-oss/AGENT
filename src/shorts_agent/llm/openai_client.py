@@ -7,10 +7,13 @@ itself, or a local server via ``base_url``).
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from shorts_agent.exceptions import ProviderError
 from shorts_agent.llm.base import LLMClient, LLMResponse
+
+if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletionMessageParam
 
 
 class OpenAIClient(LLMClient):
@@ -40,8 +43,8 @@ class OpenAIClient(LLMClient):
         self._client = OpenAI(**kwargs)
         self.temperature = temperature
 
-    def _messages(self, prompt: str, system: str | None) -> list[dict[str, str]]:
-        messages = []
+    def _messages(self, prompt: str, system: str | None) -> list[ChatCompletionMessageParam]:
+        messages: list[ChatCompletionMessageParam] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
