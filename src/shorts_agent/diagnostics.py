@@ -8,6 +8,11 @@ back, and what will fail outright.
 Every check is read-only and local: no API call, no upload, no quota spent. That
 makes ``doctor`` safe to run at any time, including from CI, where a non-zero
 exit means some part of the pipeline genuinely cannot run.
+
+The one exception is the ``ollama`` provider, where ``doctor`` asks the
+configured server which models it has — a free, read-only request that sends
+none of your data — because "is Ollama running, and is my model pulled" is the
+first thing that goes wrong with a local setup.
 """
 
 from __future__ import annotations
@@ -19,7 +24,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from shorts_agent.config import AppConfig, get_settings
+import requests
+
+from shorts_agent.config import AppConfig, Settings, get_settings
+from shorts_agent.llm.base import is_loopback_url
+from shorts_agent.llm.factory import OLLAMA_BASE_URL
 from shorts_agent.tts.factory import language_prefix
 
 Status = Literal["ok", "warn", "fail"]
@@ -147,26 +156,93 @@ def check_font(config: AppConfig) -> list[Check]:
     ]
 
 
+def _probe_models(base_url: str) -> list[str] | None:
+    """Model ids an OpenAI-compatible server reports, or None if unreachable."""
+    try:
+        with requests.Session() as session:
+            # Same reasoning as OpenAIClient: a system proxy must not intercept
+            # a request to a server on this machine.
+            session.trust_env = not is_loopback_url(base_url)
+            response = session.get(base_url.rstrip("/") + "/models", timeout=3)
+            response.raise_for_status()
+            return [str(item.get("id", "")) for item in response.json().get("data", [])]
+    except (requests.RequestException, ValueError, AttributeError):
+        return None
+
+
+def _model_is_served(name: str, available: list[str]) -> bool:
+    # Ollama lists an untagged pull as "name:latest" but accepts the bare name.
+    return name in available or (":" not in name and f"{name}:latest" in available)
+
+
+def _check_openai_compatible_llm(config: AppConfig, settings: Settings) -> Check:
+    """LLM check for Ollama or any custom OpenAI-compatible endpoint (no key needed)."""
+    provider = config.providers.llm
+    name = f"LLM ({provider})"
+    url = settings.openai_base_url or OLLAMA_BASE_URL
+    model = settings.llm_model
+    is_claude_name = model.startswith("claude")
+
+    if provider == "ollama" and is_claude_name:
+        return Check(
+            name,
+            "fail",
+            f"LLM_MODEL is {model!r}, which is not a model Ollama serves",
+            "run `ollama pull qwen2.5:7b` (or another model) and set LLM_MODEL to its name",
+        )
+
+    if provider == "ollama":
+        available = _probe_models(url)
+        if available is None:
+            return Check(
+                name,
+                "fail",
+                f"cannot reach Ollama at {url}",
+                "start it (`ollama serve`, or open the Ollama app) and check OPENAI_BASE_URL",
+            )
+        if not _model_is_served(model, available):
+            listed = ", ".join(available) or "none"
+            return Check(
+                name,
+                "fail",
+                f"Ollama is running but has no model {model!r} (it has: {listed})",
+                f"run `ollama pull {model}`, or set LLM_MODEL to one of the models above",
+            )
+        return Check(name, "ok", f"Ollama at {url}, model {model}")
+
+    if is_claude_name:
+        return Check(
+            name,
+            "warn",
+            f"custom endpoint {url}, but LLM_MODEL is the Claude name {model!r}",
+            "make sure that server serves a model with this name, or set LLM_MODEL",
+        )
+    return Check(name, "ok", f"custom endpoint {url}, model {model} (no API key needed)")
+
+
 def check_keys(config: AppConfig) -> list[Check]:
     settings = get_settings()
     checks: list[Check] = []
 
     provider = config.providers.llm
-    key = settings.anthropic_api_key if provider == "anthropic" else settings.openai_api_key
-    env_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
-    if key:
-        checks.append(
-            Check(f"LLM ({provider})", "ok", f"{env_name} set, model {settings.llm_model}")
-        )
+    if provider == "ollama" or (provider == "openai" and settings.openai_base_url):
+        checks.append(_check_openai_compatible_llm(config, settings))
     else:
-        checks.append(
-            Check(
-                f"LLM ({provider})",
-                "fail",
-                f"{env_name} is not set — ideas, scripts and metadata cannot be generated",
-                f"add {env_name} to .env (see docs/SETUP.md)",
+        key = settings.anthropic_api_key if provider == "anthropic" else settings.openai_api_key
+        env_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
+        if key:
+            checks.append(
+                Check(f"LLM ({provider})", "ok", f"{env_name} set, model {settings.llm_model}")
             )
-        )
+        else:
+            checks.append(
+                Check(
+                    f"LLM ({provider})",
+                    "fail",
+                    f"{env_name} is not set — ideas, scripts and metadata cannot be generated",
+                    f"add {env_name} to .env (see docs/SETUP.md)",
+                )
+            )
 
     if settings.youtube_api_key:
         checks.append(Check("YouTube trend signals", "ok", "YOUTUBE_API_KEY set"))

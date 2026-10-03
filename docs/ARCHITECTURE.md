@@ -168,8 +168,15 @@ data/shorts_agent.db      run history, uploads, view stats
 
 ## Testing
 
-124 tests, no network access. `tests/conftest.py` provides `FakeLLM`, which
+The suite needs no internet. `tests/conftest.py` provides `FakeLLM`, which
 scripts a sequence of JSON responses so a multi-call stage (ideas → script →
 moderation → metadata) can be driven deterministically. Providers are stubbed by
 monkeypatching the factory functions in `pipeline.orchestrator`, which is why
 those are module-level imports rather than inline ones.
+
+`tests/conftest.py` also provides a `server` fixture: a real OpenAI-compatible
+HTTP server on localhost. The OpenAI client, the `ollama` provider and `doctor`
+are tested against it over a real socket rather than against a mocked SDK,
+because the failure modes that matter for local models (a server that ignores
+`response_format`, a system proxy swallowing localhost traffic) only show up on
+the wire.

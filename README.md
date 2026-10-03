@@ -60,7 +60,10 @@ shorts-agent auth              # one-time browser authorization
 shorts-agent publish <run-id>  # upload the video you just reviewed
 ```
 
-The only required key is an LLM key. Everything else degrades: without a stock
+The only hard requirement is an LLM: a cloud API key (Anthropic or OpenAI), or a
+local model through Ollama, which needs no key at all (see
+[docs/SETUP.md](docs/SETUP.md#2-llm-required-an-api-key-or-a-local-model)).
+Everything else degrades: without a stock
 footage key it renders generated backgrounds, without a YouTube API key it uses
 your curated keyword list, without Google Trends it uses the other sources.
 
@@ -69,7 +72,7 @@ your curated keyword list, without Google Trends it uses the other sources.
 | Command | What it does |
 |---|---|
 | `init` | Copy example config and `.env` into place |
-| `doctor` | Check ffmpeg, fonts, keys and config; report what will silently degrade |
+| `doctor` | Check ffmpeg, fonts, keys and config; report what will silently degrade (with Ollama: that the server is up and the model pulled) |
 | `trends` | Show current trend signals for your niche |
 | `ideate` | Generate and screen ideas without producing a video |
 | `run` | Full pipeline. Renders locally; add `--publish` to upload |
@@ -91,7 +94,7 @@ pip install -e ".[all,dev]"                    # plus pytest, ruff, mypy
 
 | Extra | Provides |
 |---|---|
-| `llm-anthropic` / `llm-openai` | Script, idea and metadata generation |
+| `llm-anthropic` / `llm-openai` | Script, idea and metadata generation (`llm-openai` also powers Ollama and other OpenAI-compatible servers) |
 | `tts` | edge-tts voiceover (no API key, reports timing boundaries) |
 | `tts-elevenlabs` | ElevenLabs voices (higher quality, needs a key) |
 | `video` | moviepy, Pillow, numpy and a bundled ffmpeg |
@@ -127,7 +130,7 @@ The settings that matter most:
 ## Development
 
 ```bash
-pytest              # 233 tests, no network access required
+pytest              # whole suite, no internet needed
 pytest --cov=shorts_agent --cov-report=term-missing  # coverage report
 ruff check src/     # lint
 ruff format src/    # format

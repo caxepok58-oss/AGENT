@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from typer.testing import CliRunner
 
@@ -25,6 +27,10 @@ def _isolate_settings(monkeypatch, tmp_path):
     and off the real repo's cwd/.env, same isolation as test_diagnostics.py."""
     get_settings.cache_clear()
     for var in (
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "TTS_PROVIDER",
+        "OPENAI_BASE_URL",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "YOUTUBE_API_KEY",
@@ -192,3 +198,69 @@ def test_ideate_prints_generated_ideas_with_a_scripted_llm(runner, config_path, 
     assert result.exit_code == 0
     assert "subscription quietly draining" in result.output
     assert "ok" in result.output
+
+
+def _use_local_server(monkeypatch, server, model="qwen2.5:7b"):
+    """Configure a run the way a user without any API key would: Ollama via .env."""
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_MODEL", model)
+    monkeypatch.setenv("OPENAI_BASE_URL", server.url)
+    get_settings.cache_clear()
+
+
+def test_doctor_passes_for_a_local_model_setup_with_no_api_key_at_all(
+    runner, config_path, server, monkeypatch
+):
+    server.models = ["qwen2.5:7b"]
+    _use_local_server(monkeypatch, server)
+
+    result = runner.invoke(app, ["doctor", "--config", config_path])
+
+    assert result.exit_code == 0
+    assert "0 problem(s)" in result.output
+
+
+def test_doctor_tells_you_when_the_local_model_has_not_been_pulled(
+    runner, config_path, server, monkeypatch
+):
+    server.models = ["llama3.1:latest"]
+    _use_local_server(monkeypatch, server)
+
+    result = runner.invoke(app, ["doctor", "--config", config_path])
+
+    assert result.exit_code == 1
+    assert "ollama pull qwen2.5:7b" in result.output
+
+
+def test_ideate_runs_end_to_end_against_a_local_model_with_no_api_key(
+    runner, config_path, server, monkeypatch
+):
+    """The whole chain a no-API-key user depends on: .env -> provider override ->
+    factory -> OpenAI-compatible client -> a real HTTP round trip -> ideas on screen."""
+    server.reply_with(
+        json.dumps(
+            {
+                "ideas": [
+                    {
+                        "title": "Idea written by a local model",
+                        "hook": "Your phone is quietly costing you money.",
+                        "premise": "A short look at forgotten subscriptions.",
+                        "target_emotion": "urgency",
+                        "trend_keywords": [],
+                        "virality_reasoning": "Specific and slightly alarming.",
+                    }
+                ]
+            }
+        )
+    )
+    _use_local_server(monkeypatch, server)
+
+    result = runner.invoke(app, ["ideate", "--config", config_path, "--count", "1"])
+
+    assert result.exit_code == 0, result.output
+    assert "Idea written by a local model" in result.output
+    request = server.requests[0]
+    assert request.path == "/v1/chat/completions"
+    assert request.body["model"] == "qwen2.5:7b"
+    # The persona and niche from config.yaml really reach the local model.
+    assert "personal finance for beginners" in request.body["messages"][-1]["content"]

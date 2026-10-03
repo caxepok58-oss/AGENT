@@ -12,13 +12,28 @@ configure them internally.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from shorts_agent.exceptions import ProviderError
+
+
+def is_loopback_url(url: str | None) -> bool:
+    """True when ``url`` points at this machine (localhost, 127.x.x.x, ::1)."""
+    host = urlparse(url).hostname if url else None
+    if host is None:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 @dataclass

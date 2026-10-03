@@ -37,7 +37,7 @@ Windows use `Arial` or `Helvetica`. Check what is available with `fc-list : fami
 
 ---
 
-## 2. LLM key (required)
+## 2. LLM (required: an API key, or a local model)
 
 ### Anthropic (default)
 
@@ -57,6 +57,62 @@ ANTHROPIC_API_KEY=sk-ant-...
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o
 OPENAI_API_KEY=sk-...
+```
+
+`LLM_PROVIDER` in `.env` overrides `providers.llm` in `config/config.yaml`,
+because the provider is a per-machine choice. Leave it unset to use the YAML
+value.
+
+### Local model (Ollama) — no API key, no account, no payment
+
+Use this when a cloud API is not an option — for example when Anthropic and
+OpenAI are unavailable in your country — or simply to spend nothing. Everything
+runs on your own machine.
+
+1. Install Ollama from <https://ollama.com/download> (Windows, macOS, Linux).
+2. Pull a model that fits your RAM/VRAM:
+
+   ```bash
+   ollama pull qwen2.5:7b
+   ```
+
+   A 7B model (about 5 GB) runs on most laptops; 12–14B models (`gemma3:12b`,
+   `qwen2.5:14b`, about 10 GB) write noticeably better scripts if you have the
+   memory. Prefer plain instruct models: "reasoning" models that print their
+   thinking can confuse the JSON parsing.
+3. In `.env`:
+
+   ```bash
+   LLM_PROVIDER=ollama
+   LLM_MODEL=qwen2.5:7b
+   ```
+
+   No key is needed. `LLM_MODEL` must name a model you have pulled
+   (`ollama list` shows them). Ollama is expected at
+   `http://localhost:11434/v1`; set `OPENAI_BASE_URL` only if it runs elsewhere,
+   such as `http://192.168.1.50:11434/v1` on another machine.
+4. Run `shorts-agent doctor`. For Ollama it checks that the server is running and
+   that your model is pulled, and tells you the exact command if not.
+
+Ollama support uses the `llm-openai` extra (included in `all`).
+
+What to expect: a local model is slower than a cloud API (on a CPU a single call
+can take a minute or more) and less consistent, so an occasional retry is
+normal — the client re-prompts when a model returns badly formatted JSON. For
+languages other than English, check the quality of the generated script before
+committing to a model. If long prompts seem to be cut off, raise Ollama's context
+window (for example `PARAMETER num_ctx 8192` in a Modelfile).
+
+### Other OpenAI-compatible servers
+
+LM Studio, vLLM, a llama.cpp server, or a hosted gateway work through the
+`openai` provider with a custom endpoint:
+
+```bash
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=http://localhost:1234/v1     # LM Studio's default
+LLM_MODEL=<the model name your server uses>
+# OPENAI_API_KEY only if the service requires one
 ```
 
 Verify with `shorts-agent ideate` — it makes exactly one LLM call and produces

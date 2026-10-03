@@ -44,7 +44,7 @@ trends:
   max_topics: 15
 
 providers:
-  llm: "anthropic"                # anthropic | openai
+  llm: "anthropic"                # anthropic | openai | ollama (ollama needs no API key)
   tts: "edge"                     # edge | elevenlabs
   visuals: "generated"            # pexels | pixabay | generated (generated needs no API key)
   edge_tts_voice: "en-US-AndrewNeural"

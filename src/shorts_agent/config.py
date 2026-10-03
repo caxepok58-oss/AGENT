@@ -11,25 +11,34 @@ Two layers, deliberately kept separate:
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from shorts_agent.exceptions import ConfigError
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    # Provider choice is machine-specific (one box runs a local model, another a
+    # cloud API), so LLM_PROVIDER / TTS_PROVIDER override config.yaml when set;
+    # see load_config().
+    llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
     llm_model: str = "claude-opus-5-5"
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
+    # Endpoint for the OpenAI-compatible providers: a local server (Ollama, LM
+    # Studio, vLLM) or any hosted service that speaks the OpenAI API.
+    openai_base_url: str | None = None
 
     tts_provider: Literal["edge", "elevenlabs"] = "edge"
     elevenlabs_api_key: str | None = None
@@ -49,10 +58,29 @@ class Settings(BaseSettings):
     shorts_agent_db: str | None = None
     shorts_agent_output_dir: str | None = None
 
+    @field_validator("openai_base_url")
+    @classmethod
+    def _base_url_needs_a_scheme(cls, value: str | None) -> str | None:
+        # A bare `OPENAI_BASE_URL=` line in .env means "unset". Without a scheme
+        # the HTTP client fails later with an unhelpful "connection error".
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not value.startswith(("http://", "https://")):
+            raise ValueError(
+                "must start with http:// or https:// (for Ollama: http://localhost:11434/v1)"
+            )
+        return value
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError as exc:
+        # A typo in .env (say LLM_PROVIDER=olama) should read as a configuration
+        # error, not a pydantic traceback.
+        raise ConfigError(f"Invalid environment / .env settings:\n{exc}") from exc
 
 
 class ChannelConfig(BaseModel):
@@ -105,7 +133,7 @@ class TrendsConfig(BaseModel):
 
 
 class ProvidersConfig(BaseModel):
-    llm: Literal["anthropic", "openai"] = "anthropic"
+    llm: Literal["anthropic", "openai", "ollama"] = "anthropic"
     tts: Literal["edge", "elevenlabs"] = "edge"
     visuals: Literal["pexels", "pixabay", "generated"] = "generated"
     edge_tts_voice: str = "en-US-AndrewNeural"
@@ -200,6 +228,29 @@ def load_config(path: str | Path | None = None, base_dir: Path | None = None) ->
         config.storage.db_path = settings.shorts_agent_db
     if settings.shorts_agent_output_dir:
         config.storage.output_dir = settings.shorts_agent_output_dir
+
+    # Provider overrides apply only when explicitly set: the Settings defaults
+    # must never silently beat what config.yaml says.
+    if (
+        "llm_provider" in settings.model_fields_set
+        and settings.llm_provider != config.providers.llm
+    ):
+        logger.info(
+            "LLM_PROVIDER=%s (environment) overrides providers.llm=%s (config)",
+            settings.llm_provider,
+            config.providers.llm,
+        )
+        config.providers.llm = settings.llm_provider
+    if (
+        "tts_provider" in settings.model_fields_set
+        and settings.tts_provider != config.providers.tts
+    ):
+        logger.info(
+            "TTS_PROVIDER=%s (environment) overrides providers.tts=%s (config)",
+            settings.tts_provider,
+            config.providers.tts,
+        )
+        config.providers.tts = settings.tts_provider
 
     return config
 

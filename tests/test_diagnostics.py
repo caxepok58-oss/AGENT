@@ -4,6 +4,7 @@ import pytest
 
 from shorts_agent.config import get_settings
 from shorts_agent.diagnostics import (
+    _probe_models,
     check_config,
     check_ffmpeg,
     check_keys,
@@ -20,6 +21,10 @@ def _isolate_settings(monkeypatch, tmp_path):
     for var in (
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "TTS_PROVIDER",
         "YOUTUBE_API_KEY",
         "PEXELS_API_KEY",
         "PIXABAY_API_KEY",
@@ -165,3 +170,113 @@ def test_summarize_counts_by_status(config):
     assert ok > 0
     assert fail >= 1  # no LLM key in this isolated environment
     assert ok + warn + fail == len(run_all(config))
+
+
+# --- local / OpenAI-compatible LLM ----------------------------------------------
+
+
+@pytest.fixture
+def ollama(config, server, monkeypatch):
+    """Config set up for the ollama provider, pointed at the fake local server."""
+    config.providers.llm = "ollama"
+    monkeypatch.setenv("OPENAI_BASE_URL", server.url)
+    monkeypatch.setenv("LLM_MODEL", "qwen2.5:7b")
+    get_settings.cache_clear()
+    return config
+
+
+def test_ollama_needs_no_api_key_and_passes_when_the_model_is_pulled(ollama, server):
+    server.models = ["qwen2.5:7b", "llama3.1:latest"]
+
+    check = by_name(check_keys(ollama), "LLM")
+
+    assert check.status == "ok"
+    assert "qwen2.5:7b" in check.detail
+
+
+def test_ollama_with_the_model_missing_says_what_it_has_and_how_to_fix_it(ollama, server):
+    server.models = ["llama3.1:latest"]
+
+    check = by_name(check_keys(ollama), "LLM")
+
+    assert check.status == "fail"
+    assert "llama3.1:latest" in check.detail
+    assert "ollama pull qwen2.5:7b" in check.fix
+
+
+def test_an_untagged_model_name_matches_the_latest_tag(ollama, server, monkeypatch):
+    server.models = ["llama3.1:latest"]
+    monkeypatch.setenv("LLM_MODEL", "llama3.1")
+    get_settings.cache_clear()
+
+    assert by_name(check_keys(ollama), "LLM").status == "ok"
+
+
+def test_ollama_that_is_not_running_is_a_failure_that_says_how_to_start_it(config, monkeypatch):
+    config.providers.llm = "ollama"
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")  # nothing listens here
+    monkeypatch.setenv("LLM_MODEL", "qwen2.5:7b")
+    get_settings.cache_clear()
+
+    check = by_name(check_keys(config), "LLM")
+
+    assert check.status == "fail"
+    assert "cannot reach Ollama" in check.detail
+    assert "ollama serve" in check.fix
+
+
+def test_ollama_with_the_default_claude_model_name_is_a_failure(config):
+    config.providers.llm = "ollama"
+
+    check = by_name(check_keys(config), "LLM")
+
+    assert check.status == "fail"
+    assert "ollama pull" in check.fix
+
+
+def test_custom_openai_endpoint_needs_no_key_and_is_not_probed(config, monkeypatch):
+    """Only Ollama is probed; a hosted endpoint may be metered, and doctor stays offline."""
+    config.providers.llm = "openai"
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("LLM_MODEL", "some-model")
+    get_settings.cache_clear()
+
+    def boom(url):
+        raise AssertionError("doctor must not contact a non-Ollama endpoint")
+
+    monkeypatch.setattr("shorts_agent.diagnostics._probe_models", boom)
+
+    check = by_name(check_keys(config), "LLM")
+
+    assert check.status == "ok"
+    assert "no API key needed" in check.detail
+
+
+def test_custom_openai_endpoint_with_a_claude_model_name_is_only_a_warning(config, monkeypatch):
+    """A gateway in front of Claude is legitimate, so this can't be a failure."""
+    config.providers.llm = "openai"
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:4000/v1")
+    get_settings.cache_clear()
+
+    assert by_name(check_keys(config), "LLM").status == "warn"
+
+
+def test_probe_returns_the_model_ids_the_server_reports(server):
+    server.models = ["a:1", "b:2"]
+
+    assert _probe_models(server.url) == ["a:1", "b:2"]
+
+
+def test_probe_returns_none_for_an_unreachable_server():
+    assert _probe_models("http://127.0.0.1:9/v1") is None
+
+
+def test_probe_ignores_a_system_proxy_for_local_servers(server, monkeypatch):
+    """VPN tools often export HTTP_PROXY without excluding localhost."""
+    for var in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:9")
+    server.models = ["a:1"]
+
+    assert _probe_models(server.url) == ["a:1"]
