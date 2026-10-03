@@ -135,13 +135,16 @@ class TrendsConfig(BaseModel):
 class ProvidersConfig(BaseModel):
     llm: Literal["anthropic", "openai", "ollama"] = "anthropic"
     tts: Literal["edge", "elevenlabs"] = "edge"
-    visuals: Literal["pexels", "pixabay", "generated"] = "generated"
+    visuals: Literal["auto", "pixabay", "pexels", "local", "generated"] = "auto"
     edge_tts_voice: str = "en-US-AndrewNeural"
 
 
 class VisualsConfig(BaseModel):
     width: int = 1080
     height: int = 1920
+    # Your own video clips and pictures, used by providers.visuals: local and as
+    # the fallback when a stock search finds nothing.
+    footage_dir: str = "config/footage"
     music_dir: str = "config/music"
     music_volume_db: float = -18
 

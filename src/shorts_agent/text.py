@@ -19,6 +19,7 @@ not, such as German ß to ss.
 from __future__ import annotations
 
 import unicodedata
+from collections.abc import Set
 
 # Apostrophes are word-internal in many languages ("don't", "l'argent"), so they
 # are kept when they sit between other word characters.
@@ -63,7 +64,7 @@ def strip_non_word(text: str, *, allow: str = "") -> str:
     return "".join(char for char in text if _is_word_char(char) or char in allow)
 
 
-def word_set(text: str, *, min_length: int = 3, stopwords: set[str] | None = None) -> set[str]:
+def word_set(text: str, *, min_length: int = 3, stopwords: Set[str] | None = None) -> set[str]:
     """Extract distinct words for relevance comparison, in any script.
 
     ``min_length`` filters noise words. Note it is a blunt instrument for CJK,

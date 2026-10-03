@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 
 from shorts_agent.config import AppConfig
 from shorts_agent.llm.base import LLMClient, object_schema
@@ -103,7 +104,7 @@ class MetadataGenerator:
         self.llm = llm
         self.config = config
 
-    def generate(self, idea: Idea, script: Script) -> VideoMetadata:
+    def generate(self, idea: Idea, script: Script, credits: Sequence[str] = ()) -> VideoMetadata:
         channel = self.config.channel
         defaults = channel.default_hashtags or []
         extra = (
@@ -131,7 +132,7 @@ class MetadataGenerator:
         metadata = VideoMetadata(
             title=_sanitize_line(str(payload.get("title") or idea.title)),
             description=_build_description(
-                str(payload.get("description") or idea.premise), hashtags
+                str(payload.get("description") or idea.premise), hashtags, credits
             ),
             tags=_clean_tags(payload.get("tags", [])),
             hashtags=hashtags,
@@ -189,8 +190,12 @@ def _clean_hashtags(raw: list, defaults: list[str]) -> list[str]:
     return hashtags[:MAX_HASHTAGS]
 
 
-def _build_description(body: str, hashtags: list[str]) -> str:
-    """Assemble the description, ensuring hashtags appear exactly once."""
+def _build_description(body: str, hashtags: list[str], credits: Sequence[str] = ()) -> str:
+    """Assemble the description: body, footage credits, then hashtags exactly once.
+
+    The credits and hashtags are the parts that must survive, so if the limit bites
+    it is the body that gets cut.
+    """
     text = body.replace("<", "").replace(">", "").strip()
 
     # Drop any hashtag line the model already appended so we don't duplicate it.
@@ -199,9 +204,15 @@ def _build_description(body: str, hashtags: list[str]) -> str:
         lines.pop()
 
     description = _TRAILING_HASHTAGS.sub("", "\n".join(lines).strip()).rstrip()
+
+    tail = ""
+    unique_credits = [c.replace("<", "").replace(">", "").strip() for c in dict.fromkeys(credits)]
+    if unique_credits := [c for c in unique_credits if c]:
+        tail += "\n\nFootage:\n" + "\n".join(unique_credits)
     if hashtags:
-        description = f"{description}\n\n{' '.join(hashtags)}".strip()
-    return description[:DESCRIPTION_LIMIT]
+        tail += f"\n\n{' '.join(hashtags)}"
+
+    return (description[: max(DESCRIPTION_LIMIT - len(tail), 0)].rstrip() + tail).strip()
 
 
 def validate_metadata(metadata: VideoMetadata) -> VideoMetadata:

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -74,6 +75,9 @@ class Pipeline:
         ensure_runtime_dirs(config)
         self.storage = storage or Storage(config.resolve_path(config.storage.db_path))
         self._llm = llm
+        # Attribution lines for the footage used by the latest produce(), which
+        # the video description must carry (Pexels' API terms ask for it).
+        self.last_credits: list[str] = []
 
     @property
     def llm(self) -> Any:
@@ -177,6 +181,8 @@ class Pipeline:
         overlays: list[Overlay] = []
         offset = 0.0
 
+        self.last_credits = []
+
         for scene in script.scenes:
             audio = tts.synthesize(
                 scene.text, run_dir / "audio" / f"scene_{scene.index:02d}.mp3", scene.index
@@ -210,11 +216,24 @@ class Pipeline:
                     text=scene.on_screen_text,
                 )
             )
+            if visuals[-1].credit and visuals[-1].credit not in self.last_credits:
+                self.last_credits.append(visuals[-1].credit)
             logger.info(
                 "Scene %d: %.2fs audio, visual from %s",
                 scene.index,
                 audio.duration_seconds,
                 visuals[-1].source,
+            )
+
+        plain = sum(1 for visual in visuals if visual.source == "generated")
+        if plain:
+            # The cards are the last resort and look it, so say so where it is seen
+            # rather than leaving the viewer to find out from the finished video.
+            logger.warning(
+                "%d of %d scene(s) have no footage, only a plain generated card. "
+                "Run `shorts-agent doctor`, or see docs/SETUP.md (Visuals), to add real footage.",
+                plain,
+                len(visuals),
             )
 
         captions_path = None
@@ -237,8 +256,10 @@ class Pipeline:
         )
         return video_path, offset
 
-    def build_metadata(self, idea: Idea, script: Script) -> VideoMetadata:
-        return MetadataGenerator(self.llm, self.config).generate(idea, script)
+    def build_metadata(
+        self, idea: Idea, script: Script, credits: Sequence[str] = ()
+    ) -> VideoMetadata:
+        return MetadataGenerator(self.llm, self.config).generate(idea, script, credits)
 
     def publish(self, video: GeneratedVideo, *, schedule: bool = True) -> PublishResult:
         """Upload ``video``, enforcing the configured daily cap."""
@@ -328,7 +349,7 @@ class Pipeline:
             result.video_path = str(video_path)
             self.storage.update_run(run_id, video_path=str(video_path), status="rendered")
 
-            metadata = self.build_metadata(idea, script)
+            metadata = self.build_metadata(idea, script, self.last_credits)
             result.metadata = metadata
             self.storage.update_run(run_id, metadata_json=dump_json(metadata), status="ready")
 

@@ -64,7 +64,7 @@ that measured duration, so nothing drifts out of sync.
 | `ideation/` | Idea and script generation; all prompt text in `prompts.py` | Edit `prompts.py` |
 | `policy/` | Blocklist, duplicate detection, LLM moderation | Extend the blocklist YAML or the moderation prompt |
 | `tts/` | Voice synthesis **and per-word timings** | Subclass `TTSProvider` |
-| `visuals/` | Stock footage and generated fallback cards | Subclass `VisualProvider` |
+| `visuals/` | Stock footage, the owner's own footage folder, generated fallback cards | Subclass `VisualProvider` |
 | `captions/` | ASS subtitle document with word highlighting | — |
 | `video/` | moviepy composition, then ffmpeg caption burn | — |
 | `metadata/` | Title, description, tags, hashtags, with API limits enforced | Edit the `SYSTEM` prompt |
@@ -99,9 +99,12 @@ nothing extra. It is placed on the opposite side of the frame from the captions 
 if captions move to the top via config, overlays move to the bottom — because
 the two would otherwise collide.
 
-**Footage is cropped, never letterboxed.** Source clips are scaled to cover
-1080×1920 and centre-cropped. Black bars read as low-effort in the feed; losing
-the edges of a shot does not.
+**Footage is cropped, never letterboxed.** Source clips are trimmed to the
+frame's 9:16 shape around their centre, then scaled to 1080×1920. Black bars read
+as low-effort in the feed; losing the edges of a shot does not. The order matters:
+enlarging a clip to cover the frame and cropping afterwards makes moviepy resample
+several times more pixels per frame for the same picture; trimming first took a
+4-second 1080p landscape scene from about 36 seconds to under 9, caption burn included.
 
 **Stills get a slow zoom.** A frozen frame in a Short looks like a broken video,
 so images drift inward at ~1.8%/second. Short clips loop rather than freezing on
@@ -109,7 +112,9 @@ their last frame, for the same reason.
 
 **Providers degrade; they do not fail the run.** A missing API key, a
 rate-limited upstream, or an empty search returns empty (trends) or falls back to
-generated cards (visuals). The one exception is LLM moderation, which fails
+the owner's own clips and then generated cards (visuals). Degrading quietly is
+what let a plain-gradient video go unnoticed, so `doctor` flags it and `produce()`
+warns when any scene ended up as a card. The one exception is LLM moderation, which fails
 *closed* — an unreachable reviewer stops the run rather than letting unreviewed
 content through.
 
@@ -146,7 +151,12 @@ class MyVisualProvider(VisualProvider):
 ```
 
 Then add a branch to `visuals/factory.py` and the `Literal` in
-`ProvidersConfig.visuals`.
+`ProvidersConfig.visuals`. Take a `fallback: VisualProvider | None` argument as the
+stock providers do, so the factory can hand you the owner's footage as the fallback
+in place of a generated card. `auto` is resolved by `resolve_visual_provider`,
+which `doctor` also uses, so add your source there if it should be picked
+automatically. A new provider that downloads should record who made the footage in
+`VisualAsset.credit`; the credit lines end up in the video description.
 
 ### A new trend signal
 
@@ -165,7 +175,7 @@ the ear. Those two strings shape output more than any code change.
 ```
 output/<run-id>/
   audio/scene_00.mp3      per-scene narration
-  visuals/scene_00.*      per-scene footage or card
+  visuals/scene_00.*      per-scene downloaded footage or card (own clips are used in place)
   captions.ass            word-timed subtitles
   work/master.mp4         pre-caption master (deleted after burning)
   video.mp4               final deliverable

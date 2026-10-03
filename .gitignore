@@ -29,7 +29,8 @@ data/*.db
 data/*.sqlite3
 *.log
 
-# Generated media
+# Your own footage (created by `shorts-agent init`) and generated media
+config/footage/
 *.mp4
 *.mp3
 *.wav

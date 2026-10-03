@@ -73,7 +73,8 @@ what a previous scene already said, and never announce what you are about to say
 
 Every scene needs a visual_keyword: a concrete, literal, searchable subject for stock \
 footage (e.g. "person counting cash at kitchen table", not "financial freedom"). \
-Abstract concepts return unusable footage."""
+Abstract concepts return unusable footage. Always write visual_keyword in English, \
+whatever language the narration is in: footage libraries are searched in English."""
 
 SCRIPT_PROMPT = """Write the script for this YouTube Short.
 

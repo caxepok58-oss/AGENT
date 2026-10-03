@@ -79,6 +79,8 @@ class VisualAsset(BaseModel):
     path: str
     kind: Literal["video", "image"]
     source: str
+    # Attribution to show with the video, for sources whose terms ask for it.
+    credit: str | None = None
 
 
 class VideoMetadata(BaseModel):

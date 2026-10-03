@@ -7,7 +7,7 @@ the rest — the pipeline degrades rather than failing.
 |---|---|
 | Generate ideas, scripts, metadata | An LLM key (**required**) |
 | Voiceover with timed captions | Nothing — edge-tts is keyless |
-| Real stock footage | A free Pexels **or** Pixabay key |
+| Real footage behind the captions | A free Pixabay (or Pexels) key, **or** your own clips in `config/footage` |
 | Live YouTube trend signals | A YouTube Data API key |
 | Upload to your channel | YouTube OAuth credentials |
 | Higher-quality voices | An ElevenLabs key |
@@ -135,26 +135,76 @@ no video.
 
 ---
 
-## 3. Stock footage (optional but recommended)
+## 3. Footage behind the captions (strongly recommended)
 
-Without a key the agent renders gradient cards. Real footage performs better.
+With nothing set up, every scene is a plain gradient card and the video is
+captions on a coloured background. It works, but it does not look like a video
+people watch. Give the agent real footage, from either of two sources.
 
-### Pexels (free)
+By default (`providers.visuals: auto`) it uses the first of these that exists:
 
-1. <https://www.pexels.com/api/> → **Get Started**, sign up.
-2. Copy the API key from your dashboard.
-3. In `.env`: `PEXELS_API_KEY=...`
-4. In `config/config.yaml`: `providers.visuals: "pexels"`
+1. **Pixabay**, if `PIXABAY_API_KEY` is set in `.env`;
+2. else **Pexels**, if `PEXELS_API_KEY` is set;
+3. else **your own clips** in `config/footage`;
+4. else generated cards.
 
-### Pixabay (free)
+Whichever it uses, a scene the source cannot fill (nothing found, or the network
+failed) gets one of your own clips when `config/footage` has any, and a generated
+card when it does not. `shorts-agent doctor` says which source is in effect, and
+every render warns if some scenes ended up as plain cards. To force one source,
+set `providers.visuals` to `pixabay`, `pexels`, `local` or `generated`. A config
+copied from an older example may still say `generated`: change that line to `auto`.
 
-1. Create an account at <https://pixabay.com>.
-2. <https://pixabay.com/api/docs/> shows your key while signed in.
+### A. Pixabay (free key)
+
+1. Create an account at <https://pixabay.com> and sign in.
+2. Open <https://pixabay.com/api/docs/>. The key is shown in the documentation
+   while you are signed in.
 3. In `.env`: `PIXABAY_API_KEY=...`
-4. In `config/config.yaml`: `providers.visuals: "pixabay"`
 
-Both are rate-limited (roughly 200 requests/hour on Pexels' free tier). One video
-uses one request per scene, so a 8-scene video costs 8 requests.
+That is all: `auto` picks it up. The agent searches with the scene's keyword, and
+downloads the smallest file that is sharp enough (1080p for a landscape clip) rather
+than a 4K one.
+
+### B. Your own clips (no key, no internet needed)
+
+`shorts-agent init` creates `config/footage`. Put video clips (`.mp4 .mov .webm
+.mkv .avi .m4v`) and pictures (`.jpg .png .webp`) in it, in sub-folders if you like.
+Photos are turned upright and given a slow zoom; videos are looped if a scene
+outlasts them, and a long video is used from a random point, not always its start.
+
+How a clip is chosen for a scene:
+
+- **Names count.** The scene's keyword (always written in English) is compared with
+  the words in each file's path, so name things after what they show, in English:
+  `money/coins.mp4`, `city_street_traffic.mp4`. `coin` matches `coins`. The clips
+  sharing the most words win.
+- **No match is not a failure.** A scene nothing matches still gets one of your clips,
+  chosen at random: loosely related footage reads better than a gradient.
+- **Variety.** Among equally good clips, ones this video has not used yet come first.
+  With only a few clips, videos will repeat shots; eight or more is comfortable, and
+  `doctor` tells you the count.
+
+Footage that works well: at least 1080p, steady, nothing in it that has to be seen
+at the very edge (a landscape clip is cropped to its middle 9:16 strip; a vertical
+clip is used whole). Where to get it: your own phone, and the Pixabay and Pexels
+**websites**, where videos can be downloaded by hand without any API key (you may
+need a free account; read each site's current licence). Only use footage you hold the
+rights to: nothing here checks that for you.
+
+### C. Pexels (free key)
+
+1. <https://www.pexels.com/api/> → sign up and request a key.
+2. In `.env`: `PEXELS_API_KEY=...`
+
+Pexels returns vertical clips, which need no cropping. If both keys are set, Pixabay
+is used first; set `providers.visuals: pexels` to prefer Pexels.
+
+Both services are rate-limited (Pexels: 200 requests/hour; Pixabay: 100 requests per
+minute). One video uses one request per scene, a few more when a keyword has to be
+shortened and searched again. The agent adds a `Footage:` block to the video
+description crediting each creator and linking back, which Pexels' API terms ask for
+(see [POLICY.md](POLICY.md#copyright)).
 
 ---
 
@@ -296,6 +346,12 @@ Two things to check for a non-Latin script:
 - **Line length.** `MAX_CHARS_PER_LINE` in `captions/ass_builder.py` is tuned for
   Latin text. CJK characters are wider, so lower it if captions overflow.
 
+- **Footage keywords stay English.** The script writer is told to describe each
+  scene's picture in English whatever the channel's language, because that is what
+  stock libraries search in. So name your own clips in `config/footage` in English too
+  (`money/coins.mp4`); clips named in another language still get used, just without
+  matching a topic.
+
 Trend signals also need the right region: set `trends.youtube_region_code` to
 your audience's country (e.g. `RU`, `DE`, `BR`) so the trending chart and Google
 Trends reflect it.
@@ -346,6 +402,20 @@ free to run at any time.
 
 **`ANTHROPIC_API_KEY is not set`** — `.env` must be in the directory you run
 from. Confirm with `python -c "from shorts_agent.config import get_settings; print(bool(get_settings().anthropic_api_key))"`.
+
+**The video is just text on a coloured background** — no footage source is set
+up, so every scene is a generated card (`doctor` says "plain generated cards", and
+the render logs how many scenes had no footage). Add a free Pixabay key to `.env` or
+put clips in `config/footage` (section 3). If `config/config.yaml` has
+`visuals: generated`, change it to `auto`: an explicit `generated` is obeyed even when
+a key or clips exist.
+
+**A Pixabay or Pexels key is set but scenes are still plain cards** — run with `-v`
+to see why: `search failed` means the site could not be reached (blocked network,
+wrong key); `returned no usable result` means nothing matched even after shortening
+the keyword. Scenes it cannot fill use your own clips if you have them. Searches go
+straight from your machine to the site, so if the site is blocked where you are, use
+your own clips instead.
 
 **No trend signals** — expected without `YOUTUBE_API_KEY`. Add keywords to
 `config/manual_trends.yaml`; that provider never fails.

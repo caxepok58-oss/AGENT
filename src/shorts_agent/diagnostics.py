@@ -31,6 +31,8 @@ from shorts_agent.config import AppConfig, Settings, get_settings
 from shorts_agent.llm.base import is_loopback_url
 from shorts_agent.llm.factory import OLLAMA_BASE_URL
 from shorts_agent.tts.factory import language_prefix
+from shorts_agent.visuals.factory import footage_dir, resolve_visual_provider
+from shorts_agent.visuals.local import list_footage
 
 Status = Literal["ok", "warn", "fail"]
 
@@ -247,6 +249,75 @@ def _check_openai_compatible_llm(config: AppConfig, settings: Settings) -> Check
     return Check(name, "ok", f"custom endpoint {url}, model {model} (no API key needed)")
 
 
+def _env_set(settings: Settings, name: str) -> bool:
+    return bool(getattr(settings, name.lower()))
+
+
+# Fewer clips than this and a channel's videos start to share shots.
+_COMFORTABLE_CLIP_COUNT = 8
+
+
+def _check_visuals(config: AppConfig, settings: Settings) -> Check:
+    """What the scenes will actually be made of: footage, or plain cards."""
+    chosen = config.providers.visuals
+    resolved = resolve_visual_provider(config, settings)
+    via_auto = " (picked by auto)" if chosen == "auto" else ""
+    folder = config.visuals.footage_dir
+    clips = len(list_footage(footage_dir(config)))
+
+    if resolved == "generated":
+        # Only possible with generated pinned in the config: auto would have used these.
+        ignored = [
+            *(name for name in ("PIXABAY_API_KEY", "PEXELS_API_KEY") if _env_set(settings, name)),
+            *([f"{clips} clip(s) in {folder}"] if clips else []),
+        ]
+        if ignored:
+            return Check(
+                "visuals",
+                "warn",
+                f"providers.visuals is set to generated, so {' and '.join(ignored)} go unused: "
+                "videos will be captions over a gradient",
+                "set providers.visuals to auto in config/config.yaml",
+            )
+        why = f": no stock key and no clips in {folder}" if chosen == "auto" else ""
+        return Check(
+            "visuals",
+            "warn",
+            f"plain generated cards{why}. Videos will be captions over a gradient, no footage",
+            f"add a free PIXABAY_API_KEY to .env, or put your own clips in {folder} "
+            "(docs/SETUP.md, Visuals)",
+        )
+
+    if resolved == "local":
+        if not clips:
+            return Check(
+                "visuals (local)",
+                "warn",
+                f"providers.visuals is local but {folder} has no video or picture files; "
+                "every scene will fall back to a generated card",
+                f"copy .mp4/.mov/.jpg/.png files into {folder}",
+            )
+        few = (
+            f"; only {clips} so videos will repeat shots, more clips means more variety"
+            if clips < _COMFORTABLE_CLIP_COUNT
+            else ""
+        )
+        return Check("visuals (local)", "ok", f"{clips} clip(s) in {folder}{few}{via_auto}")
+
+    key = settings.pexels_api_key if resolved == "pexels" else settings.pixabay_api_key
+    env_name = f"{resolved.upper()}_API_KEY"
+    own = f"your {clips} clip(s) in {folder}" if clips else "a generated card"
+    if not key:
+        return Check(
+            f"visuals ({resolved})",
+            "warn",
+            f"{resolved} selected but {env_name} is missing; every scene will use {own} instead",
+            f"add {env_name} to .env, or set providers.visuals to auto or local",
+        )
+    fallback = f"; scenes it cannot fill use {own}"
+    return Check(f"visuals ({resolved})", "ok", f"{env_name} set{via_auto}{fallback}")
+
+
 def check_keys(config: AppConfig) -> list[Check]:
     settings = get_settings()
     checks: list[Check] = []
@@ -283,25 +354,7 @@ def check_keys(config: AppConfig) -> list[Check]:
             )
         )
 
-    visuals = config.providers.visuals
-    if visuals == "generated":
-        checks.append(
-            Check("visuals", "ok", "generated cards (no key needed; stock footage performs better)")
-        )
-    else:
-        key = settings.pexels_api_key if visuals == "pexels" else settings.pixabay_api_key
-        if key:
-            checks.append(Check(f"visuals ({visuals})", "ok", "key set"))
-        else:
-            checks.append(
-                Check(
-                    f"visuals ({visuals})",
-                    "warn",
-                    f"{visuals} selected but its key is missing — every scene will "
-                    "fall back to a generated card",
-                    f"add {visuals.upper()}_API_KEY, or set providers.visuals: generated",
-                )
-            )
+    checks.append(_check_visuals(config, settings))
 
     tts = config.providers.tts
     if tts == "elevenlabs" and not settings.elevenlabs_api_key:

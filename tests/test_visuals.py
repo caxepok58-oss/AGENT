@@ -6,10 +6,23 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from shorts_agent.config import get_settings
 from shorts_agent.exceptions import ConfigError
-from shorts_agent.visuals.factory import build_visual_provider
+from shorts_agent.visuals.factory import build_visual_provider, resolve_visual_provider
 from shorts_agent.visuals.generated import GeneratedVisualProvider
-from shorts_agent.visuals.stock import PexelsVisualProvider, PixabayVisualProvider
+from shorts_agent.visuals.local import LocalFootageProvider
+from shorts_agent.visuals.stock import (
+    PexelsVisualProvider,
+    PixabayVisualProvider,
+    Rendition,
+    best_rendition,
+    credit_line,
+    first_vertical_else_first,
+    search_queries,
+)
+
+# The factory reads the cached Settings, which read the real environment and .env.
+pytestmark = pytest.mark.usefixtures("clean_settings")
 
 
 class FakeResponse:
@@ -307,10 +320,110 @@ def test_pixabay_falls_back_when_hits_have_no_videos_dict(tmp_path):
 # --- factory -------------------------------------------------------------------
 
 
-def test_factory_builds_the_generated_provider_by_default(config):
+def with_env(monkeypatch, **variables):
+    for name, value in variables.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+
+
+def add_footage(config, *names):
+    folder = config.resolve_path(config.visuals.footage_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (folder / name).write_bytes(b"clip")
+
+
+def test_with_nothing_set_up_auto_ends_in_generated_cards(config):
+    assert config.providers.visuals == "auto"
+
+    assert build_visual_provider(config).name == "generated"
+
+
+def test_auto_uses_the_footage_folder_once_it_has_clips(config):
+    add_footage(config, "beach.mp4")
+
+    assert build_visual_provider(config).name == "local"
+
+
+def test_auto_ignores_a_footage_folder_with_nothing_usable_in_it(config):
+    add_footage(config, "notes.txt", ".DS_Store")
+
+    assert build_visual_provider(config).name == "generated"
+
+
+def test_auto_prefers_pixabay_when_its_key_is_set(config, monkeypatch):
+    with_env(monkeypatch, PIXABAY_API_KEY="k", PEXELS_API_KEY="k")
+
+    assert build_visual_provider(config).name == "pixabay"
+
+
+def test_auto_uses_pexels_when_that_is_the_only_key(config, monkeypatch):
+    with_env(monkeypatch, PEXELS_API_KEY="k")
+
+    assert build_visual_provider(config).name == "pexels"
+
+
+def test_a_stock_key_wins_over_the_footage_folder_in_auto(config, monkeypatch):
+    add_footage(config, "beach.mp4")
+    with_env(monkeypatch, PIXABAY_API_KEY="k")
+
+    assert resolve_visual_provider(config, get_settings()) == "pixabay"
+
+
+@pytest.mark.parametrize("choice", ["local", "generated", "pexels", "pixabay"])
+def test_an_explicit_choice_is_never_overridden_by_auto_detection(config, monkeypatch, choice):
+    add_footage(config, "beach.mp4")
+    with_env(monkeypatch, PIXABAY_API_KEY="k", PEXELS_API_KEY="k")
+    config.providers.visuals = choice
+
+    assert build_visual_provider(config).name == choice
+
+
+def test_stock_scenes_it_cannot_fill_fall_back_to_the_footage_folder(config, monkeypatch):
+    add_footage(config, "beach.mp4")
+    with_env(monkeypatch, PIXABAY_API_KEY="k")
+
     provider = build_visual_provider(config)
 
-    assert provider.name == "generated"
+    assert provider._fallback.name == "local"
+
+
+def test_stock_scenes_it_cannot_fill_fall_back_to_a_card_without_any_footage(config, monkeypatch):
+    with_env(monkeypatch, PIXABAY_API_KEY="k")
+
+    provider = build_visual_provider(config)
+
+    assert provider._fallback.name == "generated"
+
+
+def test_a_search_that_finds_nothing_uses_the_owners_own_clip(config, tmp_path):
+    add_footage(config, "beach.mp4")
+    local = LocalFootageProvider(config.resolve_path(config.visuals.footage_dir))
+    provider = PexelsVisualProvider(
+        "key", session=FakeSession(FakeResponse(json_data={"videos": []})), fallback=local
+    )
+
+    asset = provider.fetch("cats", tmp_path / "out", 0)
+
+    assert asset.source == "local"
+    assert Path(asset.path).name == "beach.mp4"
+
+
+def test_a_missing_key_uses_the_injected_fallback_too(tmp_path):
+    asset = PexelsVisualProvider(
+        None, session=FakeSession(), fallback=GeneratedVisualProvider(width=16, height=16)
+    ).fetch("cats", tmp_path, 0)
+
+    assert asset.source == "generated"
+
+
+def test_the_factory_builds_the_local_provider_on_request(config):
+    config.providers.visuals = "local"
+
+    provider = build_visual_provider(config)
+
+    assert isinstance(provider, LocalFootageProvider)
+    assert provider.footage_dir == config.resolve_path("config/footage")
 
 
 def test_factory_rejects_an_unknown_provider(config):
@@ -318,3 +431,325 @@ def test_factory_rejects_an_unknown_provider(config):
 
     with pytest.raises(ConfigError, match="Unknown visuals provider"):
         build_visual_provider(config)
+
+
+# --- shortening a query that finds nothing --------------------------------------
+
+
+def test_a_short_keyword_is_searched_as_it_is():
+    assert search_queries("coins") == ["coins"]
+    assert search_queries("stressed man") == ["stressed man"]
+
+
+def test_a_long_keyword_is_followed_by_shorter_versions_without_filler_words():
+    assert search_queries("person counting cash at kitchen table") == [
+        "person counting cash at kitchen table",
+        "person counting cash",
+        "person counting",
+    ]
+
+
+def test_queries_never_shrink_to_a_single_overly_generic_word():
+    assert all(len(q.split()) >= 2 for q in search_queries("hands typing on a laptop keyboard"))
+
+
+def _video_result(link="https://cdn/x.mp4", user=None, page=None):
+    video = {
+        "video_files": [{"link": link, "file_type": "video/mp4", "width": 1080, "height": 1920}]
+    }
+    if user:
+        video["user"] = {"name": user}
+    if page:
+        video["url"] = page
+    return FakeResponse(json_data={"videos": [video]})
+
+
+def test_an_empty_search_is_retried_with_a_shorter_query(tmp_path):
+    session = FakeSession(
+        FakeResponse(json_data={"videos": []}),
+        _video_result(),
+        FakeResponse(content=b"found-on-retry"),
+    )
+    provider = PexelsVisualProvider("key", session=session)
+
+    asset = provider.fetch("person counting cash at kitchen table", tmp_path, scene_index=0)
+
+    assert asset.source == "pexels"
+    assert Path(asset.path).read_bytes() == b"found-on-retry"
+    assert session.calls[0][1]["query"] == "person counting cash at kitchen table"
+    assert session.calls[1][1]["query"] == "person counting cash"
+
+
+def test_it_stops_after_the_allowed_number_of_queries_and_uses_a_card(tmp_path):
+    empty = FakeResponse(json_data={"videos": []})
+    session = FakeSession(empty, empty, empty)
+    provider = PexelsVisualProvider("key", session=session)
+
+    asset = provider.fetch("person counting cash at kitchen table", tmp_path, scene_index=0)
+
+    assert asset.source == "generated"
+    assert len(session.calls) == 3
+
+
+def test_a_network_failure_is_not_retried_with_shorter_queries(tmp_path):
+    import requests
+
+    session = FakeSession(requests.ConnectionError("down"))
+    provider = PexelsVisualProvider("key", session=session)
+
+    asset = provider.fetch("person counting cash at kitchen table", tmp_path, scene_index=0)
+
+    assert asset.source == "generated"
+    assert len(session.calls) == 1
+
+
+# --- crediting the footage -------------------------------------------------------
+
+
+def test_pexels_footage_is_credited_to_its_creator_with_a_link(tmp_path):
+    session = FakeSession(
+        _video_result(user="Jane Doe", page="https://www.pexels.com/video/coins-123/"),
+        FakeResponse(),
+    )
+
+    asset = PexelsVisualProvider("key", session=session).fetch("coins", tmp_path, scene_index=0)
+
+    assert asset.credit == "Video by Jane Doe on Pexels: https://www.pexels.com/video/coins-123/"
+
+
+def test_a_pexels_credit_still_links_to_pexels_when_the_response_has_no_details(tmp_path):
+    """Pexels' API terms require a link back, so there is always one."""
+    session = FakeSession(_video_result(), FakeResponse())
+
+    asset = PexelsVisualProvider("key", session=session).fetch("coins", tmp_path, scene_index=0)
+
+    assert asset.credit == "Video on Pexels: https://www.pexels.com"
+
+
+def test_pixabay_footage_is_credited_too(tmp_path):
+    search = FakeResponse(
+        json_data={
+            "hits": [
+                {
+                    "user": "someone",
+                    "pageURL": "https://pixabay.com/videos/id-42/",
+                    "videos": {
+                        "large": {"url": "https://cdn/l.mp4", "width": 1080, "height": 1920}
+                    },
+                }
+            ]
+        }
+    )
+    session = FakeSession(search, FakeResponse())
+
+    asset = PixabayVisualProvider("key", session=session).fetch("dogs", tmp_path, scene_index=0)
+
+    assert asset.credit == "Video by someone on Pixabay: https://pixabay.com/videos/id-42/"
+
+
+def test_a_generated_card_needs_no_credit(tmp_path):
+    asset = GeneratedVisualProvider(width=32, height=32).fetch("cats", tmp_path, scene_index=0)
+
+    assert asset.credit is None
+
+
+def test_credit_line_without_an_author():
+    assert credit_line("Pexels", None, "https://p/1", "https://home") == (
+        "Video on Pexels: https://p/1"
+    )
+
+
+# --- which file to download --------------------------------------------------------
+
+
+def renditions(*sizes):
+    return [Rendition(f"https://cdn/{w}x{h}.mp4", w, h) for w, h in sizes]
+
+
+def test_a_landscape_clip_gets_the_smallest_file_that_is_still_sharp_enough():
+    """1080 lines cropped to the middle 9:16 is plenty; 4K is ten times the download."""
+    chosen = best_rendition(
+        renditions((3840, 2160), (1920, 1080), (1280, 720), (960, 540)),
+        frame_width=1080,
+        frame_height=1920,
+    )
+
+    assert (chosen.width, chosen.height) == (1920, 1080)
+
+
+def test_a_portrait_clip_gets_the_smallest_file_that_fills_the_frame():
+    chosen = best_rendition(
+        renditions((2160, 3840), (1080, 1920), (720, 1280)), frame_width=1080, frame_height=1920
+    )
+
+    assert (chosen.width, chosen.height) == (1080, 1920)
+
+
+def test_when_nothing_is_big_enough_the_largest_file_is_used():
+    chosen = best_rendition(
+        renditions((640, 360), (1280, 720), (960, 540)), frame_width=1080, frame_height=1920
+    )
+
+    assert (chosen.width, chosen.height) == (1280, 720)
+
+
+def test_no_renditions_means_no_choice():
+    assert best_rendition([], frame_width=1080, frame_height=1920) is None
+
+
+def test_the_first_portrait_clip_beats_an_earlier_landscape_one():
+    landscape = (Rendition("https://cdn/l.mp4", 1920, 1080), "landscape credit")
+    portrait = (Rendition("https://cdn/p.mp4", 1080, 1920), "portrait credit")
+
+    assert first_vertical_else_first([landscape, portrait]) == portrait
+
+
+def test_without_a_portrait_clip_the_engines_top_result_is_used():
+    first = (Rendition("https://cdn/1.mp4", 1920, 1080), "first")
+    second = (Rendition("https://cdn/2.mp4", 1920, 1080), "second")
+
+    assert first_vertical_else_first([first, second]) == first
+    assert first_vertical_else_first([]) is None
+
+
+def test_pixabay_downloads_the_1080p_file_not_the_4k_one(tmp_path):
+    search = FakeResponse(
+        json_data={
+            "hits": [
+                {
+                    "videos": {
+                        "large": {"url": "https://cdn/4k.mp4", "width": 3840, "height": 2160},
+                        "medium": {"url": "https://cdn/1080.mp4", "width": 1920, "height": 1080},
+                        "small": {"url": "https://cdn/720.mp4", "width": 1280, "height": 720},
+                        "tiny": {"url": "https://cdn/540.mp4", "width": 960, "height": 540},
+                    }
+                }
+            ]
+        }
+    )
+    session = FakeSession(search, FakeResponse(content=b"1080p"))
+
+    PixabayVisualProvider("key", session=session).fetch("dogs", tmp_path, 0)
+
+    assert session.calls[1][0] == "https://cdn/1080.mp4"
+
+
+def test_pixabay_skips_renditions_it_does_not_offer(tmp_path):
+    """The API leaves "large" empty (url "", size 0) for clips with no 4K version."""
+    search = FakeResponse(
+        json_data={
+            "hits": [
+                {
+                    "videos": {
+                        "large": {"url": "", "width": 0, "height": 0},
+                        "medium": {"url": "https://cdn/1080.mp4", "width": 1920, "height": 1080},
+                    }
+                }
+            ]
+        }
+    )
+    session = FakeSession(search, FakeResponse())
+
+    asset = PixabayVisualProvider("key", session=session).fetch("dogs", tmp_path, 0)
+
+    assert asset.source == "pixabay"
+    assert session.calls[1][0] == "https://cdn/1080.mp4"
+
+
+def test_pixabay_asks_for_real_footage_not_animations(tmp_path):
+    session = FakeSession(FakeResponse(json_data={"hits": []}))
+
+    PixabayVisualProvider("key", session=session).fetch("dogs", tmp_path, 0)
+
+    assert session.calls[0][1]["video_type"] == "film"
+
+
+def test_the_engines_order_decides_between_landscape_clips(tmp_path):
+    """Result 1 only has a 4K file and result 2 a 1080p one: result 1 is still the
+    better match, so resolution must not reorder them."""
+    search = FakeResponse(
+        json_data={
+            "hits": [
+                {
+                    "videos": {
+                        "large": {"url": "https://cdn/first.mp4", "width": 3840, "height": 2160}
+                    }
+                },
+                {
+                    "videos": {
+                        "medium": {"url": "https://cdn/second.mp4", "width": 1920, "height": 1080}
+                    }
+                },
+            ]
+        }
+    )
+    session = FakeSession(search, FakeResponse())
+
+    PixabayVisualProvider("key", session=session).fetch("dogs", tmp_path, 0)
+
+    assert session.calls[1][0] == "https://cdn/first.mp4"
+
+
+def test_a_portrait_result_further_down_beats_a_landscape_one_above_it(tmp_path):
+    search = FakeResponse(
+        json_data={
+            "videos": [
+                {
+                    "video_files": [
+                        {
+                            "link": "https://cdn/landscape.mp4",
+                            "file_type": "video/mp4",
+                            "width": 1920,
+                            "height": 1080,
+                        }
+                    ]
+                },
+                {
+                    "video_files": [
+                        {
+                            "link": "https://cdn/portrait.mp4",
+                            "file_type": "video/mp4",
+                            "width": 1080,
+                            "height": 1920,
+                        }
+                    ]
+                },
+            ]
+        }
+    )
+    session = FakeSession(search, FakeResponse())
+
+    PexelsVisualProvider("key", session=session).fetch("cats", tmp_path, 0)
+
+    assert session.calls[1][0] == "https://cdn/portrait.mp4"
+
+
+# --- a response that is not what the documentation promised -------------------------
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"videos": "oops"},
+        {"videos": [None]},
+        {
+            "videos": [
+                {
+                    "video_files": [
+                        {"link": "x", "file_type": "video/mp4", "width": "w", "height": "h"}
+                    ]
+                }
+            ]
+        },
+        {"videos": [{"video_files": "none"}]},
+        {"error": "Too many requests"},
+        [],
+    ],
+)
+def test_a_malformed_response_falls_back_instead_of_crashing_the_run(tmp_path, body, caplog):
+    provider = PexelsVisualProvider("key", session=FakeSession(FakeResponse(json_data=body)))
+
+    with caplog.at_level("INFO"):
+        asset = provider.fetch("cats", tmp_path, 0)
+
+    assert asset.source == "generated"

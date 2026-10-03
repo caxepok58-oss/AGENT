@@ -50,6 +50,40 @@ def test_load_config_applies_defaults(tmp_path):
     assert config.content.ai_disclosure is True
 
 
+def test_visuals_default_to_whatever_footage_is_available(tmp_path):
+    """The default is auto, not generated cards: a stock key in .env or clips in the
+    footage folder must be enough, without a second setting to find and change."""
+    config = load_config(_write(tmp_path, MINIMAL), base_dir=tmp_path)
+
+    assert config.providers.visuals == "auto"
+    assert config.visuals.footage_dir == "config/footage"
+
+
+def test_the_shipped_example_config_does_not_pin_the_visuals_to_cards():
+    """`shorts-agent init` copies this file, so a pinned "generated" here would
+    silently give every new user captions over a gradient."""
+    from shorts_agent.cli import PROJECT_ROOT
+
+    config = load_config(PROJECT_ROOT / "config" / "config.example.yaml")
+
+    assert config.providers.visuals == "auto"
+    assert config.visuals.footage_dir == "config/footage"
+
+
+def test_every_documented_visuals_choice_is_accepted(tmp_path):
+    for choice in ("auto", "pixabay", "pexels", "local", "generated"):
+        data = {**MINIMAL, "providers": {"visuals": choice}}
+
+        assert load_config(_write(tmp_path, data), base_dir=tmp_path).providers.visuals == choice
+
+
+def test_an_unknown_visuals_choice_is_rejected(tmp_path):
+    data = {**MINIMAL, "providers": {"visuals": "dalle"}}
+
+    with pytest.raises(ConfigError, match="Invalid config"):
+        load_config(_write(tmp_path, data), base_dir=tmp_path)
+
+
 def test_missing_config_file_raises_config_error(tmp_path):
     with pytest.raises(ConfigError, match="Config file not found"):
         load_config(tmp_path / "nope.yaml")

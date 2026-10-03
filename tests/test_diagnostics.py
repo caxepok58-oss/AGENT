@@ -71,8 +71,114 @@ def test_selected_stock_provider_without_a_key_warns(config):
     assert "generated card" in check.detail
 
 
-def test_generated_visuals_need_no_key(config):
-    assert by_name(check_keys(config), "visuals").status == "ok"
+def add_footage(config, count):
+    folder = config.resolve_path(config.visuals.footage_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        (folder / f"clip_{i}.mp4").write_bytes(b"clip")
+
+
+def test_generated_cards_are_flagged_because_they_make_videos_without_footage(config):
+    """The pipeline runs fine on them, which is exactly why doctor has to say so."""
+    config.providers.visuals = "generated"
+
+    check = by_name(check_keys(config), "visuals")
+
+    assert check.status == "warn"
+    assert "no footage" in check.detail
+    assert "PIXABAY_API_KEY" in check.fix and "config/footage" in check.fix
+
+
+def test_generated_pinned_in_the_config_while_a_key_sits_unused_is_called_out(config, monkeypatch):
+    """The case behind "my videos are just text": an older example config pinned
+    generated, and the key the user then added was never looked at."""
+    config.providers.visuals = "generated"
+    monkeypatch.setenv("PIXABAY_API_KEY", "k")
+    get_settings.cache_clear()
+
+    check = by_name(check_keys(config), "visuals")
+
+    assert check.status == "warn"
+    assert "PIXABAY_API_KEY" in check.detail and "go unused" in check.detail
+    assert "auto" in check.fix
+
+
+def test_generated_pinned_in_the_config_while_clips_sit_unused_is_called_out(config):
+    config.providers.visuals = "generated"
+    add_footage(config, 3)
+
+    check = by_name(check_keys(config), "visuals")
+
+    assert "3 clip(s) in config/footage go unused" in check.detail
+    assert "auto" in check.fix
+
+
+def test_auto_with_nothing_to_use_says_why_it_ended_up_on_cards(config):
+    check = by_name(check_keys(config), "visuals")
+
+    assert check.status == "warn"
+    assert "no stock key and no clips in config/footage" in check.detail
+
+
+def test_auto_with_a_stock_key_reports_the_provider_it_picked(config, monkeypatch):
+    monkeypatch.setenv("PIXABAY_API_KEY", "k")
+    get_settings.cache_clear()
+
+    check = by_name(check_keys(config), "visuals (pixabay)")
+
+    assert check.status == "ok"
+    assert "picked by auto" in check.detail
+
+
+def test_a_stock_provider_mentions_the_clips_it_falls_back_to(config, monkeypatch):
+    monkeypatch.setenv("PIXABAY_API_KEY", "k")
+    get_settings.cache_clear()
+    add_footage(config, 3)
+
+    detail = by_name(check_keys(config), "visuals (pixabay)").detail
+
+    assert "your 3 clip(s) in config/footage" in detail
+
+
+def test_auto_with_clips_in_the_footage_folder_uses_them(config):
+    add_footage(config, 10)
+
+    check = by_name(check_keys(config), "visuals (local)")
+
+    assert check.status == "ok"
+    assert "10 clip(s) in config/footage" in check.detail
+    assert "repeat" not in check.detail
+
+
+def test_a_handful_of_clips_works_but_the_videos_will_repeat_shots(config):
+    config.providers.visuals = "local"
+    add_footage(config, 2)
+
+    check = by_name(check_keys(config), "visuals (local)")
+
+    assert check.status == "ok"
+    assert "only 2" in check.detail and "repeat" in check.detail
+
+
+def test_choosing_local_with_an_empty_folder_is_a_warning(config):
+    config.providers.visuals = "local"
+
+    check = by_name(check_keys(config), "visuals (local)")
+
+    assert check.status == "warn"
+    assert "no video or picture files" in check.detail
+    assert "generated card" in check.detail
+
+
+def test_a_stock_provider_without_a_key_names_the_clips_that_will_stand_in(config):
+    config.providers.visuals = "pixabay"
+    add_footage(config, 4)
+
+    check = by_name(check_keys(config), "visuals (pixabay)")
+
+    assert check.status == "warn"
+    assert "PIXABAY_API_KEY" in check.detail
+    assert "your 4 clip(s)" in check.detail
 
 
 def test_elevenlabs_without_a_key_is_a_failure(config):

@@ -430,3 +430,106 @@ def test_ideas_rejected_up_front_do_not_use_up_script_attempts(config, monkeypat
 
     assert result.idea is not None and result.idea.title == "The forgotten subscription"
     assert len(result.skipped_ideas) == 4
+
+
+def test_footage_credits_from_the_render_end_up_in_the_description(config, monkeypatch):
+    llm = FakeLLM(json_responses=[IDEAS, SCRIPT, MODERATION_OK, METADATA])
+    pipeline = make_pipeline(config, llm)
+    stub_the_render(config, pipeline, monkeypatch)
+    fake_video = config.resolve_path("output/fake.mp4")
+
+    def fake_produce(script, run_dir):
+        pipeline.last_credits = ["Video by Jane Doe on Pexels: https://www.pexels.com/video/1/"]
+        return fake_video, 30.0
+
+    monkeypatch.setattr(pipeline, "produce", fake_produce)
+
+    result = pipeline.run(publish=False)
+
+    assert result.metadata is not None
+    assert "Video by Jane Doe on Pexels" in result.metadata.description
+
+
+def test_produce_collects_each_distinct_credit_once(config, monkeypatch):
+    from shorts_agent.models import SceneAudio, VisualAsset
+
+    class StubTTS:
+        def synthesize(self, text, path, index):
+            return SceneAudio(
+                scene_index=index, audio_path=str(path), word_timings=[], duration_seconds=1.0
+            )
+
+    class StubVisuals:
+        def fetch(self, keyword, out_dir, index, *, text=None):
+            credit = "Video on Pexels: https://www.pexels.com" if index < 2 else None
+            return VisualAsset(
+                scene_index=index, path="x.mp4", kind="video", source="pexels", credit=credit
+            )
+
+    monkeypatch.setattr(
+        "shorts_agent.pipeline.orchestrator.build_tts_provider", lambda c: StubTTS()
+    )
+    monkeypatch.setattr(
+        "shorts_agent.pipeline.orchestrator.build_visual_provider", lambda c: StubVisuals()
+    )
+    monkeypatch.setattr(
+        "shorts_agent.pipeline.orchestrator.VideoAssembler",
+        lambda c: type("A", (), {"assemble": lambda self, *a, **k: config.resolve_path("v.mp4")})(),
+    )
+    pipeline = make_pipeline(config, FakeLLM())
+    script = Script(
+        idea_id="x",
+        title="T",
+        scenes=[Scene(index=i, text="Hello.", visual_keyword="k") for i in range(3)],
+    )
+
+    pipeline.produce(script, config.resolve_path("run"))
+
+    assert pipeline.last_credits == ["Video on Pexels: https://www.pexels.com"]
+
+
+def produce_with_sources(config, monkeypatch, sources):
+    """Run produce() with stubbed providers whose scenes come from `sources`."""
+    from shorts_agent.models import SceneAudio, VisualAsset
+
+    class StubTTS:
+        def synthesize(self, text, path, index):
+            return SceneAudio(
+                scene_index=index, audio_path=str(path), word_timings=[], duration_seconds=1.0
+            )
+
+    class StubVisuals:
+        def fetch(self, keyword, out_dir, index, *, text=None):
+            return VisualAsset(scene_index=index, path="x.mp4", kind="video", source=sources[index])
+
+    monkeypatch.setattr(
+        "shorts_agent.pipeline.orchestrator.build_tts_provider", lambda c: StubTTS()
+    )
+    monkeypatch.setattr(
+        "shorts_agent.pipeline.orchestrator.build_visual_provider", lambda c: StubVisuals()
+    )
+    monkeypatch.setattr(
+        "shorts_agent.pipeline.orchestrator.VideoAssembler",
+        lambda c: type("A", (), {"assemble": lambda self, *a, **k: config.resolve_path("v.mp4")})(),
+    )
+    script = Script(
+        idea_id="x",
+        title="T",
+        scenes=[Scene(index=i, text="Hello.", visual_keyword="k") for i in range(len(sources))],
+    )
+    make_pipeline(config, FakeLLM()).produce(script, config.resolve_path("run"))
+
+
+def test_produce_says_how_many_scenes_ended_up_as_plain_cards(config, monkeypatch, caplog):
+    with caplog.at_level("WARNING"):
+        produce_with_sources(config, monkeypatch, ["generated", "generated", "local"])
+
+    assert "2 of 3 scene(s) have no footage" in caplog.text
+    assert "shorts-agent doctor" in caplog.text
+
+
+def test_produce_stays_quiet_when_every_scene_has_footage(config, monkeypatch, caplog):
+    with caplog.at_level("WARNING"):
+        produce_with_sources(config, monkeypatch, ["pixabay", "local", "pexels"])
+
+    assert "no footage" not in caplog.text

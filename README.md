@@ -26,8 +26,9 @@ trends → ideas → policy → script → policy → voiceover → visuals → 
    LLM review run *before* anything expensive is rendered.
 4. **Script** — scene-by-scene narration sized to your target duration, with one
    corrective pass if it runs long.
-5. **Produce** — text-to-speech with per-word timings, stock or generated
-   visuals, ASS captions burned in by ffmpeg, composed to 1080×1920 H.264.
+5. **Produce** — text-to-speech with per-word timings, stock footage or your own
+   clips behind it (plain gradient cards if you have neither), ASS captions burned
+   in by ffmpeg, composed to 1080×1920 H.264.
 6. **Publish** — resumable upload with SEO metadata, AI-content disclosure, and
    optional scheduling. Off by default.
 
@@ -63,9 +64,10 @@ shorts-agent publish <run-id>  # upload the video you just reviewed
 The only hard requirement is an LLM: a cloud API key (Anthropic or OpenAI), or a
 local model through Ollama, which needs no key at all (see
 [docs/SETUP.md](docs/SETUP.md#2-llm-required-an-api-key-or-a-local-model)).
-Everything else degrades: without a stock
-footage key it renders generated backgrounds, without a YouTube API key it uses
-your curated keyword list, without Google Trends it uses the other sources.
+Everything else degrades: without footage (a free Pixabay key, or your own clips in
+`config/footage`) the video is captions over a plain gradient, and `doctor` says so;
+without a YouTube API key it uses your curated keyword list, without Google Trends
+it uses the other sources.
 
 ## Commands
 
@@ -119,7 +121,7 @@ The settings that matter most:
 | `content.ai_disclosure` | Sets the API's synthetic-media flag. Keep it `true` for AI voice or visuals |
 | `publishing.privacy_status` | Defaults to `private` so a human sees each video first |
 | `publishing.max_uploads_per_day` | Hard stop against a runaway loop tripping spam policies |
-| `providers.visuals` | `generated` needs no key; `pexels`/`pixabay` need free keys |
+| `providers.visuals` | `auto` (default): a Pixabay/Pexels key from `.env`, else your clips in `config/footage`, else plain cards. Or force `pixabay`, `pexels`, `local`, `generated` |
 
 ## Documentation
 
@@ -147,11 +149,16 @@ Worth knowing before you rely on this:
 - **Trend providers are unofficial or rate-limited.** Google Trends via pytrends
   scrapes an undocumented endpoint and breaks periodically; YouTube's API has a
   daily quota. The curated keyword list exists as the reliable fallback.
-- **Generated visuals are plain by design.** Gradient cards keep the pipeline
-  key-free and keep captions readable, but stock footage performs better. Add a
-  Pexels or Pixabay key for real footage.
-- **Stock footage is not automatically credited.** Pexels and Pixabay licences
-  do not require attribution, but check the current terms yourself.
+- **Without footage the videos are plain.** Generated gradient cards keep the
+  pipeline key-free and the captions readable, and nothing more. Add a free Pixabay
+  key or your own clips (see [docs/SETUP.md](docs/SETUP.md#3-footage-behind-the-captions-strongly-recommended)).
+  Stock sites are unofficial about vertical video: most clips are landscape, cropped
+  to their middle, and a 1080p landscape clip is enlarged to fill the frame, so it
+  looks softer than a native vertical one.
+- **Stock footage is credited in the description, not in the picture.** Each
+  render adds a `Footage:` block naming the creators and linking back to the site
+  (Pexels' API terms ask for this). Your own footage is not credited; its rights are
+  yours to check. Read the current licence of any site you use.
 - **Caption timing precision varies by provider and voice.** edge-tts reports
   boundary events, but which kind is up to the service: some voices emit
   per-word boundaries (exact highlighting), others only per-sentence boundaries,

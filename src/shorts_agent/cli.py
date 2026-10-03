@@ -34,6 +34,26 @@ console = Console()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+FOOTAGE_README = """Your own footage goes here.
+
+Put video clips (.mp4 .mov .webm .mkv) and pictures (.jpg .png .webp) in this folder,
+or in sub-folders of it. With `providers.visuals: auto` (the default) or `local`, the
+agent uses them as the picture behind the captions. Name files or folders after what
+they show (money/coins.mp4, city_traffic.mp4): a scene about "saving money" then picks
+the clip whose name matches. A scene that matches nothing still gets one of your clips.
+
+More clips means more variety between videos. Only use footage you have the rights to.
+
+Положите сюда свои видеоролики (.mp4 .mov .webm .mkv) и картинки (.jpg .png .webp),
+можно в подпапки. Агент будет подкладывать их под субтитры. Называйте файлы и папки
+по содержимому, лучше по-английски (money/coins.mp4, city_traffic.mp4): тогда для
+сцены про «saving money» выберется ролик с подходящим названием. Если подходящего нет,
+всё равно возьмётся какой-то из ваших роликов.
+
+Чем больше роликов, тем меньше повторов между видео. Используйте только те материалы,
+на которые у вас есть права.
+"""
+
 
 def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(
@@ -107,10 +127,18 @@ def init(
         shutil.copy2(source, target)
         console.print(f"[green]Created[/green] {target}")
 
+    footage = directory / "config" / "footage"
+    if not footage.exists():
+        footage.mkdir(parents=True)
+        (footage / "README.txt").write_text(FOOTAGE_README, encoding="utf-8")
+        console.print(f"[green]Created[/green] {footage}")
+
     console.print(
         "\nNext: add your API keys to [bold].env[/bold], set the channel niche and "
         "persona in [bold]config/config.yaml[/bold], then run "
-        "[bold]shorts-agent trends[/bold] to check your setup.\n"
+        "[bold]shorts-agent doctor[/bold] to check your setup.\n"
+        "For real footage behind the captions, add a free [bold]PIXABAY_API_KEY[/bold] to "
+        ".env or put your own clips in [bold]config/footage[/bold] (see docs/SETUP.md).\n"
         "Read [bold]docs/POLICY.md[/bold] before enabling publishing."
     )
 

@@ -91,7 +91,15 @@ What remains on you:
 - **Stock footage.** Pexels and Pixabay licences permit commercial use without
   attribution, but both prohibit some uses (e.g. redistributing the footage
   itself, or implying endorsement by identifiable people). Read the current
-  licence — they change.
+  licence — they change. Pexels' API terms additionally ask for the creator to
+  be credited and a link to Pexels to be shown, so the agent puts a `Footage:`
+  block with both in every description it writes (Pixabay's credit is included
+  too, which costs nothing). Do not delete it when you edit a description.
+- **Your own footage** (`config/footage`). Only use clips you shot or hold the
+  rights to. The agent cannot check, and does not credit it.
+- **A small footage library repeats itself.** The same few clips in every
+  video is the kind of sameness the "inauthentic content" section above warns
+  about, so a bigger library matters for more than looks.
 - **Music.** Nothing is bundled. Anything you place in `config/music/` is your
   responsibility. Commercial music will be caught by Content ID and can block or
   demonetize the video. Use the YouTube Audio Library or a licensed library.
@@ -113,7 +121,8 @@ revoked.
 | YouTube `search.list` | 100 units | Off by default; a few calls can exhaust a day |
 | YouTube `videos.insert` (upload) | ~100 units, dedicated daily allocation | Roughly 100 uploads/day at the API level, far above this project's cap |
 | Google Trends (pytrends) | No official quota | An undocumented endpoint that rate-limits aggressively. Failures are swallowed |
-| Pexels | ~200 requests/hour (free) | One request per scene |
+| Pexels | 200 requests/hour, 20,000/month (free) | One request per scene, more when a keyword is shortened |
+| Pixabay | 100 requests/minute (free) | Same. Its API documentation asks for results to be cached for 24 hours and for files not to be hotlinked permanently. The agent downloads each file and does not cache searches |
 
 The default YouTube Data API allowance is 10,000 units/day per project.
 

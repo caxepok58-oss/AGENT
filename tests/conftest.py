@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from shorts_agent.config import AppConfig, ChannelConfig
+from shorts_agent.config import AppConfig, ChannelConfig, get_settings
 from shorts_agent.llm.base import LLMClient, LLMResponse
 
 
@@ -61,6 +61,34 @@ class FakeLLM(LLMClient):
         if not self.json_responses:
             raise AssertionError("FakeLLM ran out of scripted JSON responses")
         return self.json_responses.pop(0)
+
+
+SETTINGS_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "LLM_PROVIDER",
+    "LLM_MODEL",
+    "TTS_PROVIDER",
+    "YOUTUBE_API_KEY",
+    "PEXELS_API_KEY",
+    "PIXABAY_API_KEY",
+    "ELEVENLABS_API_KEY",
+)
+
+
+@pytest.fixture
+def clean_settings(monkeypatch, tmp_path):
+    """Start from empty Settings: they are cached and read the real environment and .env.
+
+    Also moves into ``tmp_path`` so a developer's own ``.env`` cannot leak in.
+    """
+    get_settings.cache_clear()
+    for var in SETTINGS_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.chdir(tmp_path)
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

@@ -175,3 +175,54 @@ def test_a_hashtag_in_the_middle_of_a_sentence_is_left_alone():
     description = _build_description("Try the #50-30-20 rule. It is simple.", ["#Shorts"])
 
     assert description.startswith("Try the #50-30-20 rule. It is simple.")
+
+
+# --- footage credits -----------------------------------------------------------
+
+CREDITS = [
+    "Video by Jane Doe on Pexels: https://www.pexels.com/video/1/",
+    "Video by John on Pixabay: https://pixabay.com/videos/2/",
+]
+
+
+def test_credits_sit_between_the_body_and_the_hashtags():
+    description = _build_description("A useful tip.", ["#Shorts", "#money"], CREDITS)
+
+    assert description == (
+        "A useful tip.\n\nFootage:\n" + "\n".join(CREDITS) + "\n\n#Shorts #money"
+    )
+
+
+def test_a_repeated_credit_is_listed_once():
+    description = _build_description("Body.", ["#Shorts"], [CREDITS[0], CREDITS[0]])
+
+    assert description.count(CREDITS[0]) == 1
+
+
+def test_no_credits_means_no_footage_heading():
+    assert "Footage" not in _build_description("Body.", ["#Shorts"])
+
+
+def test_a_long_body_is_cut_before_the_credits_and_hashtags_are():
+    """The credits are an attribution obligation; the body is what can be shortened."""
+    description = _build_description("x" * (DESCRIPTION_LIMIT + 500), ["#Shorts"], CREDITS)
+
+    assert len(description) <= DESCRIPTION_LIMIT
+    assert CREDITS[0] in description and CREDITS[1] in description
+    assert description.endswith("#Shorts")
+
+
+def test_angle_brackets_in_a_credit_are_stripped_like_everywhere_else():
+    description = _build_description("Body.", [], ["Video by <b>Mallory</b> on Pexels: https://p"])
+
+    assert "<" not in description and ">" not in description
+
+
+def test_generate_puts_the_footage_credits_in_the_description(config):
+    llm = FakeLLM(json_responses=[PAYLOAD])
+
+    result = MetadataGenerator(llm, config).generate(
+        Idea(title="T", hook="H", premise="P"), script(), CREDITS
+    )
+
+    assert "Footage:" in result.description and CREDITS[0] in result.description

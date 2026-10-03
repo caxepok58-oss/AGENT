@@ -22,7 +22,7 @@ SCRIPT_SCHEMA = object_schema(
                     },
                     "visual_keyword": {
                         "type": "string",
-                        "description": "Concrete, literal, searchable stock-footage subject.",
+                        "description": "Concrete, literal, searchable stock-footage subject, in English.",
                     },
                     "on_screen_text": {
                         "type": "string",

@@ -74,6 +74,40 @@ def test_init_creates_config_files(runner, tmp_path):
     assert (target / ".env").exists()
 
 
+def test_init_creates_a_footage_folder_that_says_what_it_is_for(runner, tmp_path):
+    target = tmp_path / "project"
+
+    result = runner.invoke(app, ["init", "--dir", str(target)])
+
+    assert result.exit_code == 0
+    readme = target / "config" / "footage" / "README.txt"
+    assert "Your own footage goes here" in readme.read_text(encoding="utf-8")
+    assert "Положите сюда" in readme.read_text(encoding="utf-8")
+    # The note is not footage, so it must not make an empty library look populated.
+    from shorts_agent.visuals.local import list_footage
+
+    assert list_footage(target / "config" / "footage") == []
+
+
+def test_init_leaves_an_existing_footage_folder_alone(runner, tmp_path):
+    target = tmp_path / "project"
+    footage = target / "config" / "footage"
+    footage.mkdir(parents=True)
+    (footage / "mine.mp4").write_bytes(b"clip")
+
+    result = runner.invoke(app, ["init", "--dir", str(target)])
+
+    assert result.exit_code == 0
+    assert [p.name for p in footage.iterdir()] == ["mine.mp4"]
+
+
+def test_init_points_at_the_two_ways_to_get_real_footage(runner, tmp_path):
+    result = runner.invoke(app, ["init", "--dir", str(tmp_path / "project")])
+
+    assert "PIXABAY_API_KEY" in result.output
+    assert "config/footage" in result.output
+
+
 def test_init_does_not_overwrite_without_force(runner, tmp_path):
     target = tmp_path / "project"
     runner.invoke(app, ["init", "--dir", str(target)])

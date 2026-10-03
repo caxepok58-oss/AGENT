@@ -46,12 +46,18 @@ trends:
 providers:
   llm: "anthropic"                # anthropic | openai | ollama (ollama needs no API key)
   tts: "edge"                     # edge | elevenlabs
-  visuals: "generated"            # pexels | pixabay | generated (generated needs no API key)
+  # What is shown behind the captions. "auto" uses a stock key from .env if there is
+  # one (PIXABAY_API_KEY, else PEXELS_API_KEY), else your own clips in visuals.footage_dir,
+  # else plain gradient cards. Or force one: pixabay | pexels | local | generated.
+  visuals: "auto"
   edge_tts_voice: "en-US-AndrewNeural"
 
 visuals:
   width: 1080
   height: 1920
+  # Your own video clips and pictures (used by "local", and by the others when a
+  # stock search finds nothing). `shorts-agent init` creates this folder.
+  footage_dir: "config/footage"
   music_dir: "config/music"
   music_volume_db: -18
 

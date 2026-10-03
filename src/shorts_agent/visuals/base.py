@@ -5,6 +5,11 @@ from pathlib import Path
 
 from shorts_agent.models import VisualAsset
 
+# Words that carry no meaning in a footage keyword. Dropped when shortening a stock
+# query ("person counting cash at kitchen table" -> "person counting cash") and when
+# comparing a keyword with file names.
+FILLER_WORDS = frozenset("a an the at in on of with and or to for from by near into over".split())
+
 
 class VisualProvider(ABC):
     """A source of per-scene footage or imagery.

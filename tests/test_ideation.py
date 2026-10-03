@@ -197,3 +197,8 @@ def test_prompt_examples_do_not_model_invented_figures():
 
     for text in texts:
         assert not re.search(r"[$€£]\s?\d", text), text[:80]
+
+
+def test_visual_keywords_are_requested_in_english_whatever_the_narration_language():
+    """Stock libraries are searched in English; a Russian keyword finds nothing."""
+    assert "visual_keyword in English" in prompts.SYSTEM_SCRIPT
