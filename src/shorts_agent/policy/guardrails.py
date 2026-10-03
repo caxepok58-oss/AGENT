@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -30,6 +31,13 @@ from shorts_agent.text import normalize_key
 logger = logging.getLogger(__name__)
 
 DUPLICATE_THRESHOLD = 0.82
+
+# How many times the reviewer may be asked when it contradicts itself.
+MODERATION_ATTEMPTS = 2
+MODERATION_CONSISTENCY_NOTE = (
+    "Your previous answer was inconsistent: `approved` must be false only when at "
+    "least one concern has severity high. Re-evaluate and answer again, consistently."
+)
 
 MODERATION_SCHEMA = object_schema(
     {
@@ -155,33 +163,63 @@ class PolicyGuard:
             niche=idea.niche or self.config.channel.niche,
             script=script.full_text,
         )
-        try:
-            payload = self.llm.complete_json(
-                prompt, schema=MODERATION_SCHEMA, system=MODERATION_SYSTEM
-            )
-        except ProviderError as exc:
-            # A moderation outage must not silently disable the check: fail
-            # closed so nothing unreviewed reaches an upload.
-            logger.error("LLM moderation failed: %s", exc)
-            return [f"moderation unavailable: {exc}"]
 
-        concerns = payload.get("concerns", []) or []
+        # The reviewer must be consistent: `approved` is false exactly when some
+        # concern is high severity. A model that contradicts itself is asked once
+        # more (small local models do this now and then, and usually answer
+        # sensibly the second time); contradicting itself twice fails closed.
+        for attempt in range(MODERATION_ATTEMPTS):
+            try:
+                payload = self.llm.complete_json(
+                    prompt, schema=MODERATION_SCHEMA, system=MODERATION_SYSTEM
+                )
+            except ProviderError as exc:
+                # A moderation outage must not silently disable the check: fail
+                # closed so nothing unreviewed reaches an upload.
+                logger.error("LLM moderation failed: %s", exc)
+                return [f"moderation unavailable: {exc}"]
+
+            concerns = payload.get("concerns", []) or []
+            high = [c for c in concerns if str(c.get("severity", "")).lower() == "high"]
+            approved = bool(payload.get("approved", True))
+
+            if approved and not high:
+                self._log_minor_concerns(concerns)
+                return []
+            if not approved and high:
+                self._log_minor_concerns(concerns)
+                return [_describe_concern(c) for c in high]
+
+            logger.warning(
+                "Moderation contradicted itself (approved=%s, %d high-severity concern(s))%s",
+                approved,
+                len(high),
+                "; asking again" if attempt + 1 < MODERATION_ATTEMPTS else "",
+            )
+            prompt = f"{prompt}\n\n{MODERATION_CONSISTENCY_NOTE}"
+
+        # Twice inconsistent. Say what the last answer claimed so the block is explicable.
+        if high:
+            return [
+                "moderation: approved the script but listed high-severity concerns: "
+                + "; ".join(_describe_concern(c) for c in high)
+            ]
+        return ["moderation: rejected without a stated high-severity concern"]
+
+    @staticmethod
+    def _log_minor_concerns(concerns: list[dict[str, Any]]) -> None:
         for concern in concerns:
             severity = str(concern.get("severity", "")).lower()
+            if severity == "high":
+                continue
             detail = str(concern.get("detail", "")).strip()
             category = str(concern.get("category", "unspecified")).strip()
             log = logger.warning if severity == "medium" else logger.info
-            if severity != "high":
-                log("Moderation noted %s concern [%s]: %s", severity, category, detail)
+            log("Moderation noted %s concern [%s]: %s", severity, category, detail)
 
-        if payload.get("approved", True):
-            return []
 
-        return [
-            f"moderation[{c.get('category', 'unspecified')}]: {c.get('detail', '')}"
-            for c in concerns
-            if str(c.get("severity", "")).lower() == "high"
-        ] or ["moderation: rejected without a stated high-severity concern"]
+def _describe_concern(concern: dict[str, Any]) -> str:
+    return f"moderation[{concern.get('category', 'unspecified')}]: {concern.get('detail', '')}"
 
 
 def _normalize(text: str) -> str:

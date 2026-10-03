@@ -39,9 +39,20 @@ SCRIPT_SCHEMA = object_schema(
     }
 )
 
+# Appended when a model answers with valid JSON that contains no scenes at all,
+# which a strict schema permits and small local models occasionally produce.
+EMPTY_SCRIPT_NOTE = (
+    "Your previous reply contained no scenes. Write the complete script this time: "
+    "the `scenes` array must hold every scene, each with its narration in `text`."
+)
+
 SECONDS_PER_SCENE = 5.5
 MAX_SCENES = 12
 MIN_SCENES = 3
+
+
+class EmptyScriptError(ProviderError):
+    """The model returned a script with no usable scenes."""
 
 
 def scene_count_for(duration_seconds: float) -> int:
@@ -74,7 +85,11 @@ class ScriptWriter:
             cta_line=prompts.cta_line(content.outro_text if content.add_outro_cta else None),
         )
 
-        script = self._request(prompt, idea)
+        try:
+            script = self._request(prompt, idea)
+        except EmptyScriptError:
+            logger.warning("The model returned a script with no scenes; asking again")
+            script = self._request(f"{prompt}\n\n{EMPTY_SCRIPT_NOTE}", idea)  # a repeat propagates
         estimated = self.estimated_duration(script)
 
         # The model reliably respects the scene count but drifts on total length,
@@ -127,7 +142,7 @@ class ScriptWriter:
             )
 
         if not scenes:
-            raise ProviderError("The model returned a script with no usable scenes")
+            raise EmptyScriptError("The model returned a script with no usable scenes")
 
         cta = str(payload.get("cta", "")).strip()
         return Script(idea_id=idea.id, title=idea.title, scenes=scenes, cta=cta or None)

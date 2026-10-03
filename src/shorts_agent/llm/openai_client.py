@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 
 DEFAULT_ENDPOINT = "https://api.openai.com/v1"
 
+# A local model is slow, and a small one can ramble for a very long time under a
+# strict schema (one 8-minute runaway was observed against Ollama), so cap how
+# much it may write. 4096 tokens comfortably fits every stage's output, including
+# a verbose language such as Russian.
+LOCAL_MAX_TOKENS = 4096
+# Waiting is the right behaviour for local inference, and retrying a slow call
+# only doubles the wait, so use a generous timeout and no automatic retries.
+LOCAL_TIMEOUT_SECONDS = 1800.0
+
 
 class OpenAIClient(LLMClient):
     def __init__(
@@ -26,10 +35,11 @@ class OpenAIClient(LLMClient):
         *,
         api_key: str | None = None,
         base_url: str | None = None,
-        max_tokens: int = 8192,
+        max_tokens: int | None = None,
         temperature: float = 0.9,
+        local: bool = False,
     ):
-        super().__init__(model, max_tokens=max_tokens)
+        super().__init__(model, max_tokens=max_tokens or (LOCAL_MAX_TOKENS if local else 8192))
         try:
             from openai import DefaultHttpxClient, OpenAI
         except ImportError as exc:
@@ -43,6 +53,9 @@ class OpenAIClient(LLMClient):
             kwargs["api_key"] = api_key
         if base_url:
             kwargs["base_url"] = base_url
+        if local:
+            kwargs["timeout"] = LOCAL_TIMEOUT_SECONDS
+            kwargs["max_retries"] = 0
         if is_loopback_url(base_url):
             # System proxy variables (routine with VPN tools) rarely exclude
             # localhost and would swallow requests meant for a server on this

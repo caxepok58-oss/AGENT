@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from shorts_agent.config import AppConfig, get_settings
 from shorts_agent.exceptions import ConfigError
-from shorts_agent.llm.base import LLMClient
+from shorts_agent.llm.base import LLMClient, is_loopback_url
 
 # Ollama serves an OpenAI-compatible API under /v1 on this port by default.
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
@@ -51,6 +51,9 @@ def build_llm_client(config: AppConfig) -> LLMClient:
                 # A leftover Claude name is certainly invalid for the OpenAI API.
                 model = "gpt-4o"
 
-        return OpenAIClient(model=model, api_key=api_key, base_url=base_url)
+        # Ollama and anything on this machine is local inference: slow, and best
+        # served by waiting rather than retrying.
+        local = provider == "ollama" or is_loopback_url(base_url)
+        return OpenAIClient(model=model, api_key=api_key, base_url=base_url, local=local)
 
     raise ConfigError(f"Unknown LLM provider: {provider}")

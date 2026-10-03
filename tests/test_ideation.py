@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from shorts_agent.exceptions import ProviderError
+from shorts_agent.ideation import prompts
 from shorts_agent.ideation.ideas import IdeaGenerator
 from shorts_agent.ideation.script import ScriptWriter, scene_count_for
+from shorts_agent.metadata import seo
 from shorts_agent.models import Idea, TrendTopic
 from tests.conftest import FakeLLM
 
@@ -100,10 +104,36 @@ def test_script_writer_falls_back_to_title_for_missing_visual_keyword(config):
 
 
 def test_script_writer_raises_when_no_usable_scenes(config):
-    llm = FakeLLM(json_responses=[{"scenes": [], "cta": ""}])
+    empty = {"scenes": [], "cta": ""}
+    llm = FakeLLM(json_responses=[empty, empty])
 
     with pytest.raises(ProviderError, match="no usable scenes"):
         ScriptWriter(llm, config).write(Idea(title="T", hook="H", premise="P"))
+
+    assert len(llm.prompts) == 2  # asked again once, then gave up
+
+
+def test_script_writer_asks_again_when_the_first_reply_has_no_scenes(config):
+    """Valid JSON with an empty scenes array: a strict schema allows it, and small
+    local models now and then produce it."""
+    llm = FakeLLM(
+        json_responses=[{"scenes": [], "cta": ""}, script_payload(["Hello there.", "Bye."])]
+    )
+
+    script = ScriptWriter(llm, config).write(Idea(title="T", hook="H", premise="P"))
+
+    assert [s.text for s in script.scenes] == ["Hello there.", "Bye."]
+    assert "contained no scenes" in llm.prompts[1]
+    assert "contained no scenes" not in llm.prompts[0]
+
+
+def test_scenes_that_are_all_blank_count_as_no_scenes(config):
+    blank = script_payload(["", "   "])
+    llm = FakeLLM(json_responses=[blank, script_payload(["A real line."])])
+
+    script = ScriptWriter(llm, config).write(Idea(title="T", hook="H", premise="P"))
+
+    assert [s.text for s in script.scenes] == ["A real line."]
 
 
 def test_overlong_script_triggers_one_tightening_pass(config):
@@ -150,3 +180,20 @@ def test_script_within_budget_makes_only_one_call(config):
     ScriptWriter(llm, config).write(Idea(title="T", hook="H", premise="P"))
 
     assert len(llm.prompts) == 1
+
+
+def test_prompt_examples_do_not_model_invented_figures():
+    """A literal-minded local model copies example numbers straight into its ideas
+    (a 7B model produced "Cancel subscriptions saving $4,200" from this prompt's old
+    example), which contradicts the prompts' own rule against invented statistics."""
+    texts = (
+        prompts.SYSTEM_IDEATION,
+        prompts.IDEA_PROMPT,
+        prompts.SYSTEM_SCRIPT,
+        prompts.SCRIPT_PROMPT,
+        seo.SYSTEM,
+        seo.PROMPT,
+    )
+
+    for text in texts:
+        assert not re.search(r"[$€£]\s?\d", text), text[:80]

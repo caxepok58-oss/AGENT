@@ -51,6 +51,10 @@ from shorts_agent.visuals import build_visual_provider
 
 logger = logging.getLogger(__name__)
 
+# How many ideas may have their script blocked before a run gives up. Each attempt
+# costs a script and a review, so this stays small.
+MAX_SCRIPT_ATTEMPTS = 3
+
 
 class PipelineResult(BaseModel):
     run_id: str
@@ -112,6 +116,46 @@ class Pipeline:
             [f"all {len(ideas)} generated ideas were rejected"]
             + [r for s in skipped for r in s["reasons"]]
         )
+
+    def script_first_viable_idea(self, ideas: list[Idea]) -> tuple[Idea, Script, list[dict]]:
+        """Return the first idea whose script clears review, plus what was passed over.
+
+        One blocked script should not sink the whole run: the other candidates came
+        from the same LLM call, and rewriting costs far less than a failed run and a
+        rerun. It matters most with small local models, which now and then invent a
+        figure that the review rightly rejects. After ``MAX_SCRIPT_ATTEMPTS`` blocked
+        scripts it gives up rather than keep spending.
+        """
+        remaining = list(ideas)
+        passed_over: list[dict] = []
+        blocked_scripts: list[dict] = []
+
+        for _ in range(MAX_SCRIPT_ATTEMPTS):
+            try:
+                idea, skipped = self.select_idea(remaining)
+            except PolicyViolation as exc:
+                if not blocked_scripts:
+                    raise
+                raise self._all_blocked(blocked_scripts, exc.reasons) from exc
+            passed_over.extend(skipped)
+            remaining = remaining[remaining.index(idea) + 1 :]
+            logger.info("Selected idea: %s", idea.title)
+
+            try:
+                return idea, self.write_script(idea), passed_over
+            except PolicyViolation as exc:
+                logger.warning("Script for %r was blocked: %s", idea.title, "; ".join(exc.reasons))
+                entry = {"title": idea.title, "reasons": exc.reasons}
+                passed_over.append(entry)
+                blocked_scripts.append(entry)
+
+        raise self._all_blocked(blocked_scripts, [])
+
+    @staticmethod
+    def _all_blocked(blocked: list[dict], other_reasons: list[str]) -> PolicyViolation:
+        reasons = [f"{len(blocked)} script(s) were blocked, so the run stopped"]
+        reasons += [f"{entry['title']!r}: {'; '.join(entry['reasons'])}" for entry in blocked]
+        return PolicyViolation(reasons + other_reasons)
 
     def write_script(self, idea: Idea) -> Script:
         script = ScriptWriter(self.llm, self.config).write(idea)
@@ -267,19 +311,18 @@ class Pipeline:
             if not ideas:
                 raise ShortsAgentError("No usable ideas were generated")
 
-            idea, skipped = self.select_idea(ideas)
-            result.idea, result.skipped_ideas = idea, skipped
-            self.storage.update_run(
-                run_id, idea_title=idea.title, topic=idea.title, status="ideated"
-            )
-            logger.info("Selected idea: %s", idea.title)
-
-            script = self.write_script(idea)
-            result.script = script
+            idea, script, skipped = self.script_first_viable_idea(ideas)
+            result.idea, result.script, result.skipped_ideas = idea, script, skipped
             result.estimated_duration_seconds = round(
                 script.word_count / self.config.content.words_per_second, 2
             )
-            self.storage.update_run(run_id, script_json=dump_json(script), status="scripted")
+            self.storage.update_run(
+                run_id,
+                idea_title=idea.title,
+                topic=idea.title,
+                script_json=dump_json(script),
+                status="scripted",
+            )
 
             video_path, _ = self.produce(script, run_dir)
             result.video_path = str(video_path)

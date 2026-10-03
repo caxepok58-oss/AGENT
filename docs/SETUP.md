@@ -98,10 +98,25 @@ Ollama support uses the `llm-openai` extra (included in `all`).
 
 What to expect: a local model is slower than a cloud API (on a CPU a single call
 can take a minute or more) and less consistent, so an occasional retry is
-normal — the client re-prompts when a model returns badly formatted JSON. For
+normal — the client re-prompts when a model returns badly formatted JSON.
+Requests to a local server are allowed up to 30 minutes each and are never
+retried automatically (repeating a slow call only doubles the wait), and a reply
+is capped at 4096 tokens, which comfortably fits every stage — Russian included —
+while stopping a small model that starts rambling from running for ever. For
 languages other than English, check the quality of the generated script before
 committing to a model. If long prompts seem to be cut off, raise Ollama's context
 window (for example `PARAMETER num_ctx 8192` in a Modelfile).
+
+The LLM moderation pass (`policy.use_llm_moderation`, on by default) asks the same
+model to review each script and blocks the run if the review fails. A small model
+can be a poor reviewer, and because moderation fails closed, that stops the run.
+In testing, a 1.5B model blocked every harmless script it reviewed, while a 7B model
+approved most of them — which is why 7B is the suggested minimum (`doctor` warns
+about anything smaller). If a model keeps blocking harmless scripts, you can set
+`use_llm_moderation: false` in `config/config.yaml`;
+the keyword blocklist and duplicate check still apply, but nothing then reviews
+the script for subtler problems, so read every video before you publish it (see
+[POLICY.md](POLICY.md)).
 
 ### Other OpenAI-compatible servers
 

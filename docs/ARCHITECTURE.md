@@ -42,6 +42,12 @@ LLM call. Screening a finished video costs a full render — and if it passes wh
 it should not, it costs an upload. So ideas are screened on selection, and the
 script is screened again once written, before any audio is synthesized.
 
+A blocked script does not end the run: ideation produces several candidates in
+one call, so the pipeline moves on to the next one (`script_first_viable_idea`),
+up to `MAX_SCRIPT_ATTEMPTS` scripts. This matters most with small local models,
+which now and then invent a figure that the review rightly rejects. Rewriting a
+script is cheap; a failed run and a rerun are not.
+
 **Audio comes before visuals, not after.** Scene duration is determined by how
 long the narration actually takes, not by a guess. Visuals are then cut to fit
 that measured duration, so nothing drifts out of sync.

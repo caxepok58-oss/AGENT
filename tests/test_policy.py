@@ -172,3 +172,95 @@ def test_script_body_is_checked_against_the_blocklist(config, tmp_path):
 
     assert result.passed is False
     assert "dangerous_acts" in result.reasons[0]
+
+
+# --- a self-contradicting reviewer is asked again, then fails closed -----------
+
+
+def concern(severity, category="financial", detail="A problem."):
+    return {"category": category, "detail": detail, "severity": severity}
+
+
+def moderated(config, *responses):
+    config.policy.use_llm_moderation = True
+    llm = FakeLLM(json_responses=list(responses))
+    result = PolicyGuard(config, llm=llm).check_script(script_of("A tip."), idea())
+    return result, llm
+
+
+def test_a_consistent_answer_costs_exactly_one_call(config):
+    result, llm = moderated(config, APPROVED)
+
+    assert result.passed is True
+    assert len(llm.prompts) == 1
+
+
+def test_rejecting_without_any_concern_is_asked_again_and_can_then_pass(config):
+    """Seen from a real 7B model: approved=false with an empty list of concerns."""
+    contradiction = {"approved": False, "concerns": []}
+
+    result, llm = moderated(config, contradiction, APPROVED)
+
+    assert result.passed is True
+    assert len(llm.prompts) == 2
+    assert "inconsistent" in llm.prompts[1]
+
+
+def test_rejecting_over_low_severity_concerns_is_asked_again(config):
+    low_only = {"approved": False, "concerns": [concern("low"), concern("medium")]}
+
+    result, llm = moderated(config, low_only, APPROVED)
+
+    assert result.passed is True
+    assert len(llm.prompts) == 2
+
+
+def test_approving_while_listing_a_high_severity_concern_is_not_taken_at_face_value(config):
+    """The mirror image: a high-severity concern must never be waved through just
+    because the reviewer also ticked "approved"."""
+    result, llm = moderated(config, {"approved": True, "concerns": [concern("high")]}, APPROVED)
+
+    assert result.passed is True  # it reconsidered and answered consistently
+    assert len(llm.prompts) == 2
+
+
+def test_a_second_contradiction_fails_closed_and_says_why(config):
+    low_only = {"approved": False, "concerns": [concern("low")]}
+
+    result, llm = moderated(config, low_only, low_only)
+
+    assert result.passed is False
+    assert "without a stated high-severity concern" in result.reasons[0]
+    assert len(llm.prompts) == 2  # asked again once, not in a loop
+
+
+def test_approving_with_a_high_concern_twice_blocks_and_names_the_concern(config):
+    contradiction = {
+        "approved": True,
+        "concerns": [concern("high", "medical", "Promises a cure.")],
+    }
+
+    result, _ = moderated(config, contradiction, contradiction)
+
+    assert result.passed is False
+    assert "Promises a cure." in result.reasons[0]
+
+
+def test_a_reviewer_that_changes_its_mind_to_block_still_blocks(config):
+    contradiction = {"approved": False, "concerns": []}
+    block = {"approved": False, "concerns": [concern("high", "medical", "Promises a cure.")]}
+
+    result, _ = moderated(config, contradiction, block)
+
+    assert result.passed is False
+    assert "Promises a cure." in result.reasons[0]
+
+
+def test_a_provider_error_is_not_retried(config):
+    config.policy.use_llm_moderation = True
+    llm = FakeLLM(error=ProviderError("down"))
+
+    result = PolicyGuard(config, llm=llm).check_script(script_of("A tip."), idea())
+
+    assert result.passed is False
+    assert len(llm.prompts) == 1

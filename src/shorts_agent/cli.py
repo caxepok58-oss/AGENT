@@ -43,8 +43,9 @@ def _setup_logging(verbose: bool) -> None:
         handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=verbose)],
     )
     # These libraries log every HTTP request at INFO, which drowns out our own
-    # progress messages.
-    for noisy in ("httpx", "urllib3", "googleapiclient.discovery_cache", "anthropic"):
+    # progress messages. Current anthropic/openai SDKs are built on httpx2, whose
+    # logger is separate from httpx's.
+    for noisy in ("httpx", "httpx2", "urllib3", "googleapiclient.discovery_cache", "anthropic"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 

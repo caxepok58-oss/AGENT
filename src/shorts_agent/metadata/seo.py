@@ -88,6 +88,11 @@ all tags must stay under {tags_limit} characters.
 - Hashtags: 3-4, including #Shorts.{extra_hashtags}"""
 
 
+# A run of hashtags at the very end of the text, whether on its own line or tacked
+# onto the last sentence. [^\s#]+ rather than \w+, so non-Latin tags match too.
+_TRAILING_HASHTAGS = re.compile(r"(?:\s*#[^\s#]+)+\s*$")
+
+
 def _sanitize_line(text: str) -> str:
     """Strip characters the Data API rejects and collapse whitespace."""
     return re.sub(r"\s+", " ", text.replace("<", "").replace(">", "")).strip()
@@ -193,7 +198,7 @@ def _build_description(body: str, hashtags: list[str]) -> str:
     while lines and lines[-1].strip().startswith("#"):
         lines.pop()
 
-    description = "\n".join(lines).strip()
+    description = _TRAILING_HASHTAGS.sub("", "\n".join(lines).strip()).rstrip()
     if hashtags:
         description = f"{description}\n\n{' '.join(hashtags)}".strip()
     return description[:DESCRIPTION_LIMIT]

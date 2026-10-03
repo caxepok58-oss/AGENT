@@ -326,3 +326,107 @@ def test_produce_offsets_scene_timings_across_the_whole_video(config, monkeypatc
     # Scene 1's word starts at 2.0s, not 0.0s.
     assert [t.start for t in captured["timings"]] == [0.0, 2.0]
     assert total == 4.0
+
+
+# --- a blocked script falls back to the next candidate idea ---------------------
+
+SECOND_IDEA = {
+    "title": "The three charges to check",
+    "hook": "Look at your statement tonight.",
+    "premise": "Spot recurring charges.",
+    "target_emotion": "urgency",
+    "trend_keywords": [],
+    "virality_reasoning": "A concrete task the viewer can do right now.",
+}
+
+MODERATION_BLOCK = {
+    "approved": False,
+    "concerns": [
+        {"category": "financial", "detail": "Invented savings figure.", "severity": "high"}
+    ],
+}
+
+
+def ideas_payload(count):
+    first = IDEAS["ideas"][0]
+    return {"ideas": [first] + [{**SECOND_IDEA, "title": f"Idea {i}"} for i in range(2, count + 1)]}
+
+
+def stub_the_render(config, pipeline, monkeypatch):
+    monkeypatch.setattr(pipeline, "research", lambda *a, **k: [])
+    fake_video = config.resolve_path("output/fake.mp4")
+    fake_video.parent.mkdir(parents=True, exist_ok=True)
+    fake_video.write_bytes(b"not really a video")
+    monkeypatch.setattr(pipeline, "produce", lambda script, run_dir: (fake_video, 30.0))
+
+
+def test_run_moves_on_to_the_next_idea_when_a_script_is_blocked(config, monkeypatch):
+    llm = FakeLLM(
+        json_responses=[
+            ideas_payload(2),
+            SCRIPT,
+            MODERATION_BLOCK,  # first idea's script rejected
+            SCRIPT,
+            MODERATION_OK,  # second idea's script passes
+            METADATA,
+        ]
+    )
+    pipeline = make_pipeline(config, llm)
+    stub_the_render(config, pipeline, monkeypatch)
+
+    result = pipeline.run(publish=False)
+
+    assert result.idea is not None and result.idea.title == "Idea 2"
+    assert [s["title"] for s in result.skipped_ideas] == ["The forgotten subscription"]
+    assert "Invented savings figure." in result.skipped_ideas[0]["reasons"][0]
+    assert pipeline.storage.get_run(result.run_id)["idea_title"] == "Idea 2"
+    assert pipeline.storage.get_run(result.run_id)["status"] == "ready"
+
+
+def test_run_gives_up_after_a_few_blocked_scripts(config, monkeypatch):
+    from shorts_agent.pipeline.orchestrator import MAX_SCRIPT_ATTEMPTS
+
+    attempts = [SCRIPT, MODERATION_BLOCK] * MAX_SCRIPT_ATTEMPTS
+    llm = FakeLLM(json_responses=[ideas_payload(5), *attempts])
+    pipeline = make_pipeline(config, llm)
+    stub_the_render(config, pipeline, monkeypatch)
+
+    with pytest.raises(PolicyViolation, match="3 script"):
+        pipeline.run(publish=False)
+
+    # One ideation call, then a script and a review per attempt, and nothing more.
+    assert len(llm.prompts) == 1 + 2 * MAX_SCRIPT_ATTEMPTS
+    failed = [r for r in pipeline.storage.recent_runs() if r["status"] == "failed"]
+    assert failed
+
+
+def test_a_single_blocked_script_still_fails_the_run_with_the_reason(config, monkeypatch):
+    llm = FakeLLM(json_responses=[IDEAS, SCRIPT, MODERATION_BLOCK])
+    pipeline = make_pipeline(config, llm)
+    stub_the_render(config, pipeline, monkeypatch)
+
+    with pytest.raises(PolicyViolation, match="Invented savings figure"):
+        pipeline.run(publish=False)
+
+
+def test_ideas_rejected_up_front_do_not_use_up_script_attempts(config, monkeypatch, tmp_path):
+    """Screening a title is free; only blocked *scripts* count against the limit."""
+    blocklist = tmp_path / "blocklist.yaml"
+    blocklist.write_text('categories:\n  banned:\n    - "forbidden"\n')
+    config.policy.blocklist_file = str(blocklist)
+    banned = {**SECOND_IDEA, "title": "A forbidden idea"}
+    llm = FakeLLM(
+        json_responses=[
+            {"ideas": [banned, banned, banned, banned, IDEAS["ideas"][0]]},
+            SCRIPT,
+            MODERATION_OK,
+            METADATA,
+        ]
+    )
+    pipeline = make_pipeline(config, llm)
+    stub_the_render(config, pipeline, monkeypatch)
+
+    result = pipeline.run(publish=False)
+
+    assert result.idea is not None and result.idea.title == "The forgotten subscription"
+    assert len(result.skipped_ideas) == 4

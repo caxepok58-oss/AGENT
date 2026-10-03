@@ -18,6 +18,7 @@ first thing that goes wrong with a local setup.
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -170,6 +171,24 @@ def _probe_models(base_url: str) -> list[str] | None:
         return None
 
 
+_PARAMETER_COUNT = re.compile(r"[:\-_](\d+(?:\.\d+)?)b\b", re.IGNORECASE)
+
+
+def _small_model_note(model: str) -> str | None:
+    """A caution for models too small to write good scripts or to review them.
+
+    In testing against Ollama, a 1.5B model blocked every harmless script in the
+    moderation pass, while a 7B model approved most of them.
+    """
+    match = _PARAMETER_COUNT.search(model)
+    if match and float(match.group(1)) < 7:
+        return (
+            f"{match.group(1)}B parameters is small: expect generic scripts, and a "
+            "moderation pass that may block nearly everything (7B or larger works much better)"
+        )
+    return None
+
+
 def _model_is_served(name: str, available: list[str]) -> bool:
     # Ollama lists an untagged pull as "name:latest" but accepts the bare name.
     return name in available or (":" not in name and f"{name}:latest" in available)
@@ -207,6 +226,14 @@ def _check_openai_compatible_llm(config: AppConfig, settings: Settings) -> Check
                 "fail",
                 f"Ollama is running but has no model {model!r} (it has: {listed})",
                 f"run `ollama pull {model}`, or set LLM_MODEL to one of the models above",
+            )
+        note = _small_model_note(model)
+        if note:
+            return Check(
+                name,
+                "warn",
+                f"Ollama at {url}, model {model}: {note}",
+                "try a larger model, e.g. `ollama pull qwen2.5:7b`, and set LLM_MODEL to it",
             )
         return Check(name, "ok", f"Ollama at {url}, model {model}")
 

@@ -20,8 +20,9 @@ opening line must create an immediate curiosity gap, pattern interrupt, or stake
 end and re-watched, not for being long. Every sentence must earn the next one.
 - One idea per video. A Short that tries to cover three tips retains worse than one \
 that nails a single specific, concrete, surprising point.
-- Specificity beats generality. "I saved $4,200 by cancelling one subscription" \
-outperforms "save money on subscriptions".
+- Specificity beats generality. Name the exact thing — one particular charge, setting \
+or mistake — rather than its broad category, and never by inventing figures or \
+personal results.
 - Payoff must land. If the hook promises a reveal, the reveal must arrive and be \
 satisfying, or the viewer feels cheated and the channel loses trust.
 
@@ -56,7 +57,10 @@ under 12 words, designed to stop a scroll. No "In this video" or "Hey guys".
 - virality_reasoning must be a concrete, falsifiable claim about why this will \
 retain viewers — not generic praise.
 - Be honest: no invented statistics, no fabricated personal anecdotes presented as \
-true, no promises the video cannot deliver."""
+true, no promises the video cannot deliver.
+- Do not state a money figure, percentage or other result in a title or hook unless it \
+is simply a count of items in the video ("three charges to check"). Never promise a \
+specific saving or outcome."""
 
 SYSTEM_SCRIPT = """You write scripts for short-form vertical video. You write for the ear, \
 not the eye: short sentences, spoken rhythm, concrete words, no jargon, no filler.

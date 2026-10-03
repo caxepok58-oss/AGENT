@@ -153,3 +153,25 @@ def test_metadata_prompt_includes_the_narration(config):
     MetadataGenerator(llm, config).generate(Idea(title="T", hook="H", premise="P"), script())
 
     assert "Check your statement." in llm.prompts[0]
+
+
+def test_hashtags_tacked_onto_the_last_sentence_are_not_duplicated():
+    """A small local model wrote its hashtags at the end of the sentence, not on a
+    line of their own, so the description ended up with them twice."""
+    body = "Quick tips for bank statements. #Shorts #MoneyBasics"
+
+    description = _build_description(body, ["#Shorts", "#MoneyBasics"])
+
+    assert description == "Quick tips for bank statements.\n\n#Shorts #MoneyBasics"
+
+
+def test_non_latin_trailing_hashtags_are_replaced_too():
+    description = _build_description("Три совета. #деньги #сбережения", ["#Shorts"])
+
+    assert description == "Три совета.\n\n#Shorts"
+
+
+def test_a_hashtag_in_the_middle_of_a_sentence_is_left_alone():
+    description = _build_description("Try the #50-30-20 rule. It is simple.", ["#Shorts"])
+
+    assert description.startswith("Try the #50-30-20 rule. It is simple.")

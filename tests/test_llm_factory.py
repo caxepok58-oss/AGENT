@@ -164,3 +164,46 @@ def test_a_mistyped_provider_is_a_readable_config_error(env):
 
     with pytest.raises(ConfigError, match="llm_provider"):
         get_settings()
+
+
+# --- local-inference profile -------------------------------------------------
+
+
+def is_local(client: object) -> bool:
+    assert isinstance(client, OpenAIClient)
+    return client._client.max_retries == 0 and client.max_tokens == 4096
+
+
+def test_ollama_gets_the_local_profile(config, env):
+    config.providers.llm = "ollama"
+    env(llm_model="qwen2.5:7b")
+
+    assert is_local(build_llm_client(config))
+
+
+def test_ollama_on_another_machine_still_gets_the_local_profile(config, env):
+    config.providers.llm = "ollama"
+    env(llm_model="qwen2.5:7b", openai_base_url="http://192.168.1.50:11434/v1")
+
+    assert is_local(build_llm_client(config))
+
+
+def test_an_openai_compatible_server_on_this_machine_gets_the_local_profile(config, env):
+    config.providers.llm = "openai"
+    env(openai_base_url="http://127.0.0.1:1234/v1", llm_model="m")
+
+    assert is_local(build_llm_client(config))
+
+
+def test_a_hosted_openai_compatible_service_keeps_the_cloud_defaults(config, env):
+    config.providers.llm = "openai"
+    env(openai_base_url="https://api.example.com/v1", openai_api_key="sk-x", llm_model="m")
+
+    assert not is_local(build_llm_client(config))
+
+
+def test_plain_openai_keeps_the_cloud_defaults(config, env):
+    config.providers.llm = "openai"
+    env(openai_api_key="sk-test")
+
+    assert not is_local(build_llm_client(config))

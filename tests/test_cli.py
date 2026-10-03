@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 from typer.testing import CliRunner
@@ -264,3 +265,19 @@ def test_ideate_runs_end_to_end_against_a_local_model_with_no_api_key(
     assert request.body["model"] == "qwen2.5:7b"
     # The persona and niche from config.yaml really reach the local model.
     assert "personal finance for beginners" in request.body["messages"][-1]["content"]
+
+
+def test_http_client_request_logs_are_silenced(runner):
+    """Current SDKs log every request at INFO through httpx2, which the old
+    httpx-only silencing missed, so each model call printed a noise line."""
+    from shorts_agent.cli import _setup_logging
+
+    names = ("httpx", "httpx2", "urllib3")
+    saved = {name: logging.getLogger(name).level for name in names}
+    try:
+        _setup_logging(False)
+        for name in names:
+            assert logging.getLogger(name).level == logging.WARNING
+    finally:
+        for name, level in saved.items():
+            logging.getLogger(name).setLevel(level)

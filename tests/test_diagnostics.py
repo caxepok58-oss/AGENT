@@ -5,6 +5,7 @@ import pytest
 from shorts_agent.config import get_settings
 from shorts_agent.diagnostics import (
     _probe_models,
+    _small_model_note,
     check_config,
     check_ffmpeg,
     check_keys,
@@ -280,3 +281,31 @@ def test_probe_ignores_a_system_proxy_for_local_servers(server, monkeypatch):
     server.models = ["a:1"]
 
     assert _probe_models(server.url) == ["a:1"]
+
+
+@pytest.mark.parametrize(
+    "model", ["qwen2.5:1.5b", "qwen2.5:0.5b-instruct", "llama3.2:3b", "gemma3:4b", "phi3:3.8b"]
+)
+def test_small_models_get_a_warning(model):
+    assert _small_model_note(model) is not None
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["qwen2.5:7b", "llama3.1:8b", "gemma3:12b", "qwen2.5:14b-instruct", "llama3.1:70b", "mistral"],
+)
+def test_seven_billion_parameters_and_up_are_not_warned_about(model):
+    assert _small_model_note(model) is None
+
+
+def test_doctor_warns_but_does_not_fail_for_a_small_ollama_model(config, server, monkeypatch):
+    config.providers.llm = "ollama"
+    server.models = ["qwen2.5:1.5b"]
+    monkeypatch.setenv("OPENAI_BASE_URL", server.url)
+    monkeypatch.setenv("LLM_MODEL", "qwen2.5:1.5b")
+    get_settings.cache_clear()
+
+    check = by_name(check_keys(config), "LLM")
+
+    assert check.status == "warn"
+    assert "qwen2.5:7b" in check.fix

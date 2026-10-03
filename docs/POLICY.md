@@ -21,7 +21,7 @@ yourself before publishing at any volume.
 | `max_uploads_per_day: 2` | A loop that uploads dozens of near-identical videos is the fastest way to trigger the spam policy |
 | Policy screening runs before rendering | Catches problems while they cost one LLM call instead of a full render and an upload |
 | `ai_disclosure: true` | Synthetic voice and visuals require disclosure. See below |
-| Moderation fails closed | If the LLM reviewer is unreachable, the run stops rather than publishing unreviewed content |
+| Moderation fails closed | If the LLM reviewer is unreachable, or contradicts itself twice (say, "rejected" with no high-severity concern listed — it is asked once more first), the run stops rather than publishing unreviewed content |
 
 Raising any of these is a decision you should make deliberately, after you have
 watched several finished videos end to end.

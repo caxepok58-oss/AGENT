@@ -133,3 +133,26 @@ def test_local_servers_are_reached_even_when_a_system_proxy_is_configured(
     client = OpenAIClient("test-model", api_key="not-needed", base_url=server.url)
 
     assert client.complete("hello").text == "reached"
+
+
+def test_a_local_client_caps_output_waits_long_and_does_not_retry(server):
+    client = OpenAIClient("m", api_key="x", base_url=server.url, local=True)
+
+    assert client.max_tokens == 4096
+    assert client._client.max_retries == 0
+    assert client._client.timeout == 1800.0
+
+
+def test_a_cloud_client_keeps_the_sdk_defaults(server):
+    client = OpenAIClient("m", api_key="x", base_url=server.url)
+
+    assert client.max_tokens == 8192
+    assert client._client.max_retries == 2
+    assert client._client.timeout != 1800.0
+
+
+def test_an_explicit_token_limit_beats_the_local_default(server):
+    assert (
+        OpenAIClient("m", api_key="x", base_url=server.url, local=True, max_tokens=999).max_tokens
+        == 999
+    )
